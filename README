@@ -1,0 +1,10 @@
+ls4-scheduler
+
+program to read sequence of fields for LS4 survey
+and efficiently schedule them. Socket commands send to
+telescope (tcp) and camera (ls4_control) controllers.
+
+THis is a modification of the scheduler for LSQ (lsq-scheduler)
+
+DLR 2024 Apr 9
+
