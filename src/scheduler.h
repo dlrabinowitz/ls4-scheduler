@@ -6,7 +6,9 @@
 
 */
 
+#include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <math.h>
 #include <string.h>
 #include <time.h>
@@ -14,6 +16,9 @@
 #include "sky_utils.h"
 #include "socket.h"
 
+
+#define False false
+#define True true
 
 #define SNE_SHIFT 0 /* set to 1 to shift paired fields by 1.0 deg, 0 for 0.5 deg */
 #define FAKE_RUN 0 /* set to 1 for simulated obs */
@@ -206,15 +211,47 @@ typedef struct {
     double update_time;
 } Telescope_Status;
 
-typedef struct{
-    int line_count;
-    int write_lag;
-    char shutter_state[256];
-    char camera_mode[256];
-    double read_time;
-    int error_code;
-} Camera_Status;
+typedef struct {
+    unsigned char nostatus;
+    unsigned char unknown;
+    unsigned char idle;
+    unsigned char exposing;
+    unsigned char readout_pending;
+    unsigned char fetch_pending;
+    unsigned char reading;
+    unsigned char fetching;
+    unsigned char flushing;
+    unsigned char erasing;
+    unsigned char purging;
+    unsigned char autoclear;
+    unsigned char autoflush;
+    unsigned char poweron;
+    unsigned char poweroff;
+    unsigned char powerbad;
+    unsigned char error;
+    unsigned char active;
+    unsigned char errored;
+} Controller_State;
 
+enum {NOSTATUS, UNKNOWN, IDLE, EXPOSING, READOUT_PENDING, READING,
+      FETCHING, FLUSHING, ERASING, PURGING, AUTOCLEAR, AUTOFLUSH,
+      POWERON, POWEROFF, POWERBAD, FETCH_PENDING, ERROR, ACTIVE, ERRORED };
+
+#define NUM_STATES 19
+
+#define ALL_POSITIVE_VAL 15 /* all controllers have the positive state */
+#define ALL_NEGATIVE_VAL 0  /* all controllers have the same negative flag */
+
+typedef struct {
+    bool ready;
+    bool error;
+    int error_code;
+    char state[1024];
+    char comment[1024];
+    char date[1024];
+    double read_time;
+    int state_val[NUM_STATES];
+} Camera_Status;
 
 #define MAX_FITS_WORDS 100
 
@@ -394,14 +431,32 @@ int get_telescope_focus (double *focus);
 
 /* from scheduler_camera.c */
 
-int update_camera_status(Camera_Status *status);
-int do_camera_command(char *command, char *reply, int timeout_sec);
-int print_camera_status(Camera_Status *status, FILE *output);
-int take_exposure(Field *f, Fits_Header *header,
-       double *actual_expt,char *filename, double *ut, double *jd);
+int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
+		    char *name, double *ut, double *jd,
+		    bool wait_flag, int *exp_error_code);
+int get_filename(char *filename,struct tm *tm,int shutter);
 int imprint_fits_header(Fits_Header *header);
-int bad_readout(Camera_Status *status);
-int wait_camera_readout(Camera_Status *cam_status);
+double wait_exp_done(int expt);
+int init_camera();
+int clear_camera();
+int update_camera_status(Camera_Status *cam_status);
+void *do_camera_command_thread(void *args);
+int do_status_command(char *command, char *reply, int timeout_sec);
+int do_camera_command(char *command, char *reply, int timeout_sec);
+int do_command(char *command, char *reply, int timeout_sec, int port);
+int bad_readout();
+int get_filename(char *filename,struct tm *tm,int shutter);
+int wait_camera_readout(Camera_Status *status);
+int print_camera_status(Camera_Status *status, FILE *output);
+
+/* from scheduler_status.c*/
+
+int init_status_name();
+int binary_string_to_int(char *binaryString) ;
+int get_value_string(char *reply, char *keyword, char *separator, char *value_string);
+int get_string_status(char *keyword, char *reply, char *status);
+int parse_status(char *reply,Camera_Status *status);
+int print_camera_status(Camera_Status *status,FILE *output);
 
 /* from scheduler_corrections.c */
 
@@ -416,6 +471,16 @@ int install_signal_handlers();
 void sigterm_handler();
 void sigusr1_handler();
 void sigusr2_handler();
+
+/* from scheduler_fits.c */
+
+int init_fits_header(Fits_Header *header);
+int update_fits_header(Fits_Header *header, char *keyword, char *value);
+int add_fits_word(Fits_Header *header, char *keyword, char *value);
+
+/* from scheduler_socket.c */
+int send_command(char *command, char *reply, char *machine, 
+			int port, int timeout_sec);
 
 extern double sin(),fabs();
 

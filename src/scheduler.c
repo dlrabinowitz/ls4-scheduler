@@ -76,7 +76,7 @@ char filter_name[1024];
 
 /************************************************************/
       
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	int done = 0;
 	struct tm tm;
@@ -102,6 +102,7 @@ main(int argc, char **argv)
         FILE *weather_input;
 #endif
     
+	init_status_names();
 
 #if FAKE_RUN    
         if(argc!=7&&argc!=6){
@@ -1405,6 +1406,8 @@ int observe_next_field(Field *sequence, int index, int index_prev,
     int n,num_exposures;
     double split_expt,expt;
     int bad_read_count;
+    int exp_error_code=0;
+    bool wait_flag = True;
 
     ra_dither=0.0;
     dec_dither=0.0;
@@ -1906,9 +1909,8 @@ fprintf(stderr,"HA = %7.3f,  expt = %7.3f,  LONG_EXPTIME = %7.3f\n",
          gettimeofday(&t1,NULL);
          ut=get_ut();
          jd=get_jd();
-      
          actual_expt=expt;
-         if(take_exposure(f,fits_header,&actual_expt,filename,&ut,&jd)!=0){
+         if(take_exposure(f,fits_header,&actual_expt,filename,&ut,&jd,wait_flag,&exp_error_code)!=0){
            fprintf(stderr,"observe_next_field: ERROR taking exposure %d\n",n);
            return(-1);
          }
