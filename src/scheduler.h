@@ -6,6 +6,8 @@
 
 */
 
+#define observer_home "/home/ls4/quest-src-lasilla"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
