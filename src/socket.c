@@ -64,8 +64,11 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
             fflush(stderr);
   }
 
-  if (write_data(s, (char *)command, strlen(command)+1)
-            != strlen(command)+1) {
+  //DEBUG
+  if (write_data(s, (char *)command, strlen(command))
+            != strlen(command)) {
+  //if (write_data(s, (char *)command, strlen(command)+1)
+  //        != strlen(command)+1) {
           fprintf(stderr,"send_command: can't write data to socket\n");
           return(-1);
   }

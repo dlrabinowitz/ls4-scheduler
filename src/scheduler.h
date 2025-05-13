@@ -24,7 +24,7 @@
 
 #define SNE_SHIFT 0 /* set to 1 to shift paired fields by 1.0 deg, 0 for 0.5 deg */
 #define FAKE_RUN 0 /* set to 1 for simulated obs */
-#define UT_OFFSET 0.0 /* ut offset for debugging */
+#define UT_OFFSET 12.0 /* ut offset for debugging */
 #define DEEP_DITHER_ON 0 /* turn on dithering for deep coadds */
 #
 #define USE_TELESCOPE_OFFSETS 0 /* change to 1 to use telescope_offsets file for offset */

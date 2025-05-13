@@ -342,10 +342,13 @@ int main(int argc, char **argv)
           fflush(stderr);
         }
 
+#if 0
+	// there is no init command for the LS4 camera
         if(init_camera()!=0){
            fprintf(stderr,"unable to initialize camera\n");
            do_exit(-1);
         }
+#endif
         ut_prev=-1000.0;
 
         print_camera_status(&cam_status,stderr);

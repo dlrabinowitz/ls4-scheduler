@@ -347,6 +347,7 @@ LEGALITIES:
 #include <stdarg.h>
 #include <string.h>
 #include "sky_utils.h"
+//#define FAKE_TELESCOPE
 
 FILE *sclogfl = NULL;
 
@@ -1031,7 +1032,11 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 		strcpy(zone_name, "Chilean");
 		*zabr = 'C';
 		*use_dst = -1;
+#ifdef FAKE_TELESCOPE
+		*longit = 10.7153;
+#else
 		*longit = 4.7153;
+#endif
 		*lat = -29.257;
 		*stdz = 4.;
 		*elevsea = 2347.;

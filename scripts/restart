@@ -8,9 +8,10 @@
 #
 #
 unalias rm
+source /home/observer/.login
 #
 
-set CCP_LOG = "/home/observer/ccp.log"
+#set CCP_LOG = "/home/observer/logs/ccp.log"
 #
 # if ccp is already running, it will be aborted. Wait up to MAX_ABORT_WAIT_SEC
 # for ccp to abort.

@@ -338,6 +338,7 @@ LEGALITIES:
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
+//#define FAKE_TELESCOPE
 
 /* a couple of the system-dependent magic numbers are defined here */
 
@@ -1093,7 +1094,11 @@ void load_site(longit,lat,stdz,use_dst,
 		strcpy(zone_name, "Chilean");
 		*zabr = 'C';
 		*use_dst = -1;
+#ifdef FAKE_TELESCOPE
+		*longit = 16.7153;
+#else
 		*longit = 4.7153;
+#endif
 		*lat = -29.257;
 		*stdz = 4.;
 		*elevsea = 2347.;

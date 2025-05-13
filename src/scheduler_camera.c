@@ -11,7 +11,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#define MACHINE_NAME "quest16_local"
+#define MACHINE_NAME "pco-nuc"
 #define COMMAND_PORT 5000  
 #define STATUS_PORT 5001  
 
@@ -19,7 +19,8 @@
 #define COMMAND_DELAY_USEC 100000 /* useconds to wait between commands */
 
 /* first word in reply from telescope controller */
-#define ERROR_REPLY "-1"
+#define ERROR_REPLY "ERROR: 1"
+#define DONE_REPLY "DONE"
 
 
 /* Telescope Commands */
@@ -575,7 +576,8 @@ int do_command(char *command, char *reply, int timeout_sec, int port){
      usleep(COMMAND_DELAY_USEC);
 
      if (returnval == 0){
-       if(strstr(reply,ERROR_REPLY)!=NULL || strlen(reply) == 0 ){
+       //if(strstr(reply,ERROR_REPLY)!=NULL || strlen(reply) == 0 ){
+       if( strstr(reply,DONE_REPLY)==NULL || strlen(reply) == 0  || strstr(reply,"ERROR_REPLY") != NULL){
          fprintf(stderr,
             "do_camera_command: command [%s] returns error: %s\n", 
              command,reply);

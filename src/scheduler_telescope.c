@@ -12,7 +12,7 @@
 #define COMMAND_BUFFER_SIZE 1024
 
 
-#define MACHINE_NAME "quest17_local"
+#define MACHINE_NAME "pco-nuc"
 #define COMMAND_PORT 3911  /*nightime */
 /*#define COMMAND_PORT 3912 daytime */
 #define DAYTIME_COMMAND_PORT 3912
