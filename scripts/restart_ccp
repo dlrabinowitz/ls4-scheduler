@@ -1,10 +1,10 @@
 #!/bin/tcsh
 #
-# script for retarting ls4 observation programs.
-# Use add argument "stop" to stop observation programs
+# script for retarting ls4 camera control software.
+# Use add argument "stop" to stop the control software instead of starting
 #
 #
-# syntax: restart [stop]
+# syntax: restart_ccp [data_path] [stop (optional)]
 #
 #
 unalias rm
@@ -20,12 +20,25 @@ set MAX_ABORT_WAIT_SEC = 25
 # After re-launching ccp, wait up to MAX_START_WAIT_SEC for ccp to start
 set MAX_START_WAIT_SEC = 25
 #
-#
 set stop_flag = 0
-if ( $#argv == 1 ) then
-   if ( $argv[1] == "stop" || $argv[1] == "STOP" ) then
+set data_path = $QUESTNEATDATADIR/test
+#
+if ( $#argv != 1 ) then
+   echo "ERROR: syntax restart_ccp [data_path or stop]"
+   exit
+endif
+
+if ( $argv[1] == "stop" || $argv[1] == "STOP" || $argv[1] == "Stop" ) then
       set stop_flag = 1
-   endif
+else
+  set data_path = $argv[1]
+  if ( ! -e $data_path ) then 
+     mkdir $data_path
+     if ( ! -e $data_path ) then
+       echo "ERROR: unable to create data path at $data_path"
+       exit
+     endif
+  endif
 endif
 #
 ## copy and existing questmgr script to ~guest
@@ -43,7 +56,7 @@ set wait_time = 0
 while ( $is_running > 0 && $wait_time < $MAX_ABORT_WAIT_SEC ) 
      sleep 5
      @ wait_time = $wait_time + 5
-     set is_running = `ps -aef | grep -e "ccp" | grep -ve "tail" | grep -ve "grep" | wc -l`
+     set is_running = `ps -aef | grep -e "run_ccp" | grep -ve "tail" | grep -ve "grep" | wc -l`
      if ( $is_running > 0 ) then
         echo "previous instance of ccp still running after waiting $wait_time sec " 
      endif
@@ -58,12 +71,13 @@ endif
 
 if ( $stop_flag ) exit
 
+# restart ccp. Note, other default options specified in start_ccp.bash
 echo "restarting ccp" 
 if ( -e $CCP_LOG ) rm $CCP_LOG
 if ( $FAKE_OBS ) then
-  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -fake -verbose -log $CCP_LOG 
+  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -fake -log_level $CCP_LOG_LEVEL  -log $CCP_LOG  -data_path $data_path
 else
-  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -verbose -log $CCP_LOG 
+  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -log_level $CCP_LOG_LEVEL  -log $CCP_LOG  -data_path $data_path
 endif
 
 echo "waiting up to 25 seconds for ccp to start" 
@@ -126,5 +140,5 @@ else
    echo "good  ccp status"
 endif
 #
-echo "done with restart" 
+echo "done with restart_ccp" 
 

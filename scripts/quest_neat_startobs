@@ -61,7 +61,7 @@ set SCRIPT_LOG = "$d.log"
 #set OFFSET_LOG = "/home/observer/logs/telescope_offsets.log"
 #set STARTOBS_LOG = "/home/observer/logs/startobs.log"
 #set SCHEDULER_PROGRAM = "/home/observer/scheduler/bin/scheduler"
-#set VERBOSE_FLAG = 1
+set VERBOSE_FLAG = 1
 set HOUR_LIMIT = 24
 #
 if ( ! -e $QUESTNEATDATADIR ) then
@@ -79,6 +79,7 @@ if ( ! -e $QUESTNEATDATADIR/$d/logs ) then
    mkdir $QUESTNEATDATADIR/$d/logs
 endif
 
+set data_path = $QUESTNEATDATADIR/$d
 set log_dir = $QUESTNEATDATADIR/$d/logs
 #
 if ( ! -e $STARTOBS_LOG ) touch $STARTOBS_LOG
@@ -87,7 +88,7 @@ date >> $STARTOBS_LOG
 echo "" >> $STARTOBS_LOG
 if ( $stop_flag ) then
    echo "stopping ongoing observations" >> $STARTOBS_LOG
-   restart stop >> $STARTOBS_LOG
+   $LS4_ROOT/bin/restart_ccp stop >> $STARTOBS_LOG
 endif
 
 
@@ -156,7 +157,7 @@ slay scheduler >>& $STARTOBS_LOG
 endif
 
 echo "restarting ccp " >> $STARTOBS_LOG
-/home/observer/restart >>& $STARTOBS_LOG
+$LS4_ROOT/bin/restart_ccp $data_path >>& $STARTOBS_LOG
 echo "done restarting ccp" >> $STARTOBS_LOG
 #
 echo "checking if $log_dir exists" >>& $STARTOBS_LOG
