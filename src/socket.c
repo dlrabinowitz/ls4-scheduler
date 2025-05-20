@@ -17,10 +17,10 @@ int send_command(char *command, char *reply, char *machine,
 void init_socket_status(int s,socket_status *s_status);
 int read_data(int s, char *buf, int n);
 int write_data(int s, char *buf, int n);
-int call_socket(char *hostname, u_short portnum);
+int call_socket(char *hostname, u_short portnum, int read_timeout_sec);
 int establish(u_short portnum);
 int get_connection(int s);
-int wait_pipe(int pipe, int timeout_sec);
+//int wait_pipe(int pipe, int timeout_sec);
 
 /************************************************************/
 
@@ -49,13 +49,14 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
   }
 
   p = port;
-  if ((s= call_socket(machine,p)) < 0) { 
+  if ((s= call_socket(machine,p,timeout_sec)) < 0) { 
         fprintf(stderr,"send_command: could not open socket with machine %s port %d\n",
              machine,port);
         fflush(stderr);
         perror("send_command: call_socket");
         return(-1);
   }
+
 
   if(verbose1){
   	    ut=get_ut();
@@ -97,7 +98,8 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
 
 
 /************************************************************/
-
+#if 0
+// not used
 int wait_pipe(int pipe, int timeout_sec)
 {
      struct timeval timeout;
@@ -126,7 +128,7 @@ int wait_pipe(int pipe, int timeout_sec)
     
      return(0);
 }
-
+#endif
 /************************************************************/
 
 
@@ -202,7 +204,7 @@ int write_data(int s,         /* connected socket */
 
 /************************************************************/
  
-int call_socket(char *hostname, u_short portnum)
+int call_socket(char *hostname, u_short portnum, int read_timeout_sec)
  { 
      struct sockaddr_in sa;
      struct hostent *hp;
@@ -219,6 +221,12 @@ int call_socket(char *hostname, u_short portnum)
      sa.sin_port= htons((u_short)portnum);
      if ((s= socket(hp->h_addrtype,SOCK_STREAM,0)) < 0) /* get socket */
  	return(-1);
+
+     struct timeval tv;
+     tv.tv_sec = read_timeout_sec;  
+     tv.tv_usec = 0;
+     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+
  	
      if (connect(s,(const  struct sockaddr* )&sa,sizeof sa) < 0) { /* connect */
  	close(s);

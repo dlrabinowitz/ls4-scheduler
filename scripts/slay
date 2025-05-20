@@ -5,7 +5,6 @@ die "Usage: slay.pl <signal> program_name\n"
 
 open(PS_CMD, "ps -auxw |") or die "open ps failed\n";
 
-
 while (<PS_CMD>) {
 
     chomp;

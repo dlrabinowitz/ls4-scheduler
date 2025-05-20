@@ -338,7 +338,7 @@ LEGALITIES:
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
-//#define FAKE_TELESCOPE
+#define FAKE_TELESCOPE
 
 /* a couple of the system-dependent magic numbers are defined here */
 
@@ -474,7 +474,8 @@ void oprntf(char *fmt, ...)
 #endif
 			break;
 		case 'h':    /* signals short argument ... */
-			shval = va_arg(ap, short);
+			//shval = va_arg(ap, short);
+			shval = va_arg(ap, int);
 			outform[++i] = 'd';
 			outform[++i] = '\0';
 			++p;  /* skip the 'd' in '%hd' */
@@ -1095,12 +1096,17 @@ void load_site(longit,lat,stdz,use_dst,
 		*zabr = 'C';
 		*use_dst = -1;
 #ifdef FAKE_TELESCOPE
+                strcpy(site_name, "Fake Site");
+                strcpy(zone_name, "Fake Location");
+		*zabr = 'F';
+
 		*longit = 16.7153;
+		*stdz = 16.;
 #else
 		*longit = 4.7153;
+		*stdz = 4.;
 #endif
 		*lat = -29.257;
-		*stdz = 4.;
 		*elevsea = 2347.;
 		*elev = 2347.; /* for ocean horizon, not Andes! */
 		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
@@ -5707,7 +5713,7 @@ int find_by_name(ra, dec, epoch, date, use_dst, enter_ut, night_date, stdz,
 
 	if(nobjects == 0) {
 		printf("No objects!\n");
-		return;
+		return (0);
 	}
 
 	jd = true_jd(date, use_dst, enter_ut, night_date, stdz);
@@ -6182,7 +6188,7 @@ int set_to_jd(date, use_dst, enter_ut, night_date, stdz, jd)
 }
 
 
-main()
+int main()
 
 {
 	struct date_time date,dateback;

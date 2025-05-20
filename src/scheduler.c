@@ -296,6 +296,10 @@ int main(int argc, char **argv)
 
         ut=get_ut();
         jd=get_jd();
+        if(verbose){
+          fprintf(stderr,"current ut,jd,ut_offset: %12.6f %12.6f %12.6f\n", ut,jd,UT_OFFSET );
+        }
+
         while(jd<nt.jd_sunset){
            fprintf(stderr,
             "# UT: %9.5f UT_Start: %9.5f jd: %12.6f jd_sunset : %12.6fwaiting for sunset ...\n",
@@ -310,7 +314,7 @@ int main(int argc, char **argv)
 
         if(jd>nt.jd_sunrise){
            fprintf(stderr,
-               "# UT: %9.5f UT_End: %9.5f Sun us up. Exiting.\n",
+               "# UT: %9.5f UT_End: %9.5f Sun is up. Exiting.\n",
 		ut,nt.ut_end);
 	   fflush(stderr);
            do_exit(0);
@@ -410,14 +414,16 @@ int main(int argc, char **argv)
 #else
 	ut=get_ut();
         jd=get_jd();
+        if(verbose){
+          fprintf(stderr,"current ut,jd: %12.6f %12.6f\n", ut,jd );
+        }
 #endif
-
         if(verbose){
           fprintf(stderr,"initialing sequence fields \n");
         }
 
         num_observable_fields=init_fields(sequence,num_fields,
-                       &nt,&nt_5day,&nt_10day,&nt_15day,&site,jd);
+                       &nt,&nt_5day,&nt_10day,&nt_15day,&site,jd,&tel_status);
 
 
         fprintf(stderr,
@@ -505,7 +511,7 @@ int main(int argc, char **argv)
 		   fflush(stderr);
 		}
                 num_new_observable_fields=init_fields(new_sequence+num_new_fields_prev,num_new_fields,
-                       &nt,&nt_5day,&nt_10day,&nt_15day,&site,jd);
+                       &nt,&nt_5day,&nt_10day,&nt_15day,&site,jd,&tel_status);
 		if ( num_new_observable_fields > 0 ) {
                   fprintf(stderr,"Adding %d new fields to queue, of which %d are observable\n",
 			num_new_fields,num_new_observable_fields);
@@ -1411,7 +1417,14 @@ int observe_next_field(Field *sequence, int index, int index_prev,
     int bad_read_count;
     int exp_error_code=0;
     bool wait_flag = True;
+    char exp_mode[256];
 
+    // for now, always wait for complete readout and transfer before starting
+    // new exposure. For faster duty cycles, use EXP_MODE_FIRST for first exposure
+    // , EXP_MODE_NEXT for subsequebnt exposures, and EXP_MODE_LAST for last 
+    // exposure in a sequence.
+      
+    strcpy(exp_mode,EXP_MODE_SINGLE);
     ra_dither=0.0;
     dec_dither=0.0;
     ra_rate=0.0;
@@ -1816,8 +1829,8 @@ fprintf(stderr,"HA = %7.3f,  expt = %7.3f,  LONG_EXPTIME = %7.3f\n",
     
     ut=get_ut();
     jd=get_jd();
-    lst=tel_status->lst;
 
+    lst=tel_status->lst;
     if(verbose){
        fprintf(stderr,"observe_next_field: updating FITS header\n");
     }
@@ -1913,7 +1926,9 @@ fprintf(stderr,"HA = %7.3f,  expt = %7.3f,  LONG_EXPTIME = %7.3f\n",
          ut=get_ut();
          jd=get_jd();
          actual_expt=expt;
-         if(take_exposure(f,fits_header,&actual_expt,filename,&ut,&jd,wait_flag,&exp_error_code)!=0){
+
+         if(take_exposure(f,fits_header,&actual_expt,filename,&ut,&jd,
+		wait_flag,&exp_error_code,exp_mode)!=0){
            fprintf(stderr,"observe_next_field: ERROR taking exposure %d\n",n);
            return(-1);
          }
@@ -2718,7 +2733,8 @@ time_up, time_required, time_left, and jd_next */
 int init_fields(Field *sequence, int num_fields, 
                 Night_Times *nt, Night_Times *nt_5day,
 		Night_Times *nt_10day, Night_Times *nt_15day,
-		Site_Params *site, double jd)
+		Site_Params *site, double jd,
+                Telescope_Status *tel_status)
 {
     int i,j,n_observable,n_up_too_short,n_moon_too_close,n_never_rise;
     int n_moon_too_close_later;
@@ -2756,6 +2772,8 @@ int init_fields(Field *sequence, int num_fields,
     whole_night_duration=(nt->jd_sunrise-jd)*24.0;
 
     if(verbose){
+         fprintf(stderr,"current lst: %7.3f\n",tel_status->lst);
+         fprintf(stderr,"current jd: %7.3f\n",jd-2450000);
          fprintf(stderr,"jd_start: %7.3f\n",nt->jd_start-2450000);
          fprintf(stderr,"jd_end: %7.3f\n",nt->jd_end-2450000);
          fprintf(stderr,"dark night duration : %7.3f\n",dark_night_duration);

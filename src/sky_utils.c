@@ -347,7 +347,7 @@ LEGALITIES:
 #include <stdarg.h>
 #include <string.h>
 #include "sky_utils.h"
-//#define FAKE_TELESCOPE
+#define FAKE_TELESCOPE
 
 FILE *sclogfl = NULL;
 
@@ -1033,12 +1033,16 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 		*zabr = 'C';
 		*use_dst = -1;
 #ifdef FAKE_TELESCOPE
-		*longit = 10.7153;
+		strcpy(site_name, "Fake Site");
+		strcpy(zone_name, "Fake Location");
+		*zabr = 'F';
+		*longit = 16.7153;
+		*stdz = 16.;
 #else
 		*longit = 4.7153;
+		*stdz = 4.;
 #endif
 		*lat = -29.257;
-		*stdz = 4.;
 		*elevsea = 2347.;
 		*elev = 2347.; /* for ocean horizon, not Andes! */
 		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
@@ -4338,6 +4342,7 @@ void print_tonight(struct date_time date, double lat, double longit,
 		/* initial guess */
 	jdsunset = jd_sun_alt(-(0.83+horiz),jdsunset,lat,longit);
 	if(jdsunset > 0.) {
+		printf(stdout,"jdsunset = %12/6f\n",jdsunset);
 		oprntf("#Sunset (%5.0f m horizon): ",elev);
 		print_time((jdsunset-zone(use_dst,stdz,jdsunset,*jdb,*jde)/24.),0);
 		print_tz(jdsunset,use_dst,*jdb,*jde,zabr);

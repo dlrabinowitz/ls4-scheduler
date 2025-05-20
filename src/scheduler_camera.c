@@ -11,46 +11,6 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#define MACHINE_NAME "pco-nuc"
-#define COMMAND_PORT 5000  
-#define STATUS_PORT 5001  
-
-
-#define COMMAND_DELAY_USEC 100000 /* useconds to wait between commands */
-
-/* first word in reply from telescope controller */
-#define ERROR_REPLY "ERROR: 1"
-#define DONE_REPLY "DONE"
-
-
-/* Telescope Commands */
-
-#define INIT_COMMAND "init"
-#define OPEN_COMMAND "open shutter"
-#define CLOSE_COMMAND "close shutter"
-#define STATUS_COMMAND "status"
-#define CLEAR_COMMAND "clear"
-#define SHUTDOWN_COMMAND "shutdown"
-#define READOUT_COMMAND "r" /* r num_lines fileroot */
-#define HEADER_COMMAND "h" /* h keyword value */
-#define EXPOSE_COMMAND "e" /* shutter exptime fileroot */
-
-/* Timeout after 10 seconds if expecting quick response from
-   a camera command */
-
-#define CAMERA_TIMEOUT_SEC 10
-#define READ_TIMEOUT_SEC 30
-
-/* call to status command is used to wait for readout.
-   Readout time is normally 33 sec. Timeout after 3 minutes */
-
-#define CAMERA_STATUS_TIMEOUT_SEC 180
-#define CAMERA_CLEAR_TIMEOUT_SEC 120
-#define CAMERA_INIT_TIMEOUT_SEC 60 
-
-/* error code or readtime exceeding these two values,
-   respectively, indicate bad readout of camera */
-
 #define BAD_ERROR_CODE 2
 #define BAD_READOUT_TIME 60.0
 
@@ -87,7 +47,7 @@ Camera_Status cam_status;
 
 int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    char *name, double *ut, double *jd,
-		    bool wait_flag, int *exp_error_code)
+		    bool wait_flag, int *exp_error_code, char *exp_mode)
 {
     char command[MAXBUFSIZE],reply[MAXBUFSIZE];
     char filename[1024],date_string[1024],shutter_string[256],field_description[1024];
@@ -97,7 +57,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     int e;
     double expt;
     int shutter;
-    int timeout;
+    int timeout = 0.0;
     pthread_t command_thread;
 
     int result = 0;
@@ -128,8 +88,8 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 
     if(verbose){
          fprintf(stderr,
-           "take_exposure: exposing %7.1f sec  shutter: %d filename: %s\n",
-           expt,shutter,filename);
+           "take_exposure: exposing %7.1f sec  shutter: %d filename: %s  exp_mode: %s  wait_flag: %d\n",
+           expt,shutter,filename,exp_mode,wait_flag);
          fflush(stderr);
     }
 
@@ -167,6 +127,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
         sprintf(comment_line,"                      ");
         sprintf(comment_line,"'no comment'");
     }
+
     if(update_fits_header(header,COMMENT_KEYWORD,comment_line)<0){
           fprintf(stderr,"take_exposure: error updating fits header %s:%s\n",
 		COMMENT_KEYWORD,comment_line);
@@ -183,13 +144,11 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
       return(-1);
     }
 
-    sprintf(command,"e %d %9.3f %s",shutter,expt,filename);
-
-    if(verbose){
-        fprintf(stderr,"take_exposure: %s sending command %s\n",date_string,command);
-    }
-
-    timeout = 2*expt + 30 ;
+    char shutter_state[12];
+    if(shutter)
+      strcpy(shutter_state,"True");
+    else
+      strcpy(shutter_state,"False");
 
 
     /* initialize command semaphores to 0. 
@@ -201,8 +160,19 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
      * If the thread is  not used, neither will be posted.
      *
     */
+    if(verbose){
+        fprintf(stderr,"take_exposure: initializing start_semaphore\n");
+    }
     sem_init(&command_start_semaphore,0,0);
+
+    if(verbose){
+        fprintf(stderr,"take_exposure: initializing done_semaphore\n");
+    }
     sem_init(&command_done_semaphore,0,0);
+
+    if(verbose){
+        fprintf(stderr,"take_exposure: set readout_pending to True\n");
+    }
     readout_pending = True;
 
     /* If wait_flag is False, then launch a new thread (command_thread) to execute 
@@ -222,12 +192,28 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     */
 
 
+    /* get the appropriate timeout for reading the reply to the next exposure
+     * command. This depends on the expoure mode, the exposure time, and the
+     * choice for wait_flag
+    */
+    timeout = expose_timeout(exp_mode, expt, wait_flag);
+
+    if(verbose){
+        fprintf(stderr,"take_exposure: timeout will be %7.3f sec\n",timeout);
+    }
+
+    sprintf(command,"%s %s %9.3f %s %s",EXPOSE_COMMAND,shutter_state,expt,filename,exp_mode);
+
+    if(verbose){
+        fprintf(stderr,"take_exposure: %s sending command %s\n",date_string,command);
+    }
+
     if (! wait_flag){
        if(verbose){
          fprintf(stderr,"take_exposure: using a thread to execute the exposure command");
          fflush(stderr);
        }
-       
+
        pthread_t thread_id;
        Do_Command_Args *command_args;
 
@@ -277,7 +263,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     }
     else{
        if(verbose){
-         fprintf(stderr,"take_exposure: executing do_camera_command");
+         fprintf(stderr,"take_exposure: executing do_camera_command with wait = True");
          fflush(stderr);
        }
 
@@ -307,6 +293,63 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     strncpy(name,filename,FILENAME_LENGTH);
     
     return(0);
+}
+
+/*****************************************************/
+/* return total time to take an exposure. If the exposure occurs */
+
+int expose_timeout (char *exp_mode, double exp_time, bool wait_flag)
+{
+   double t=0;
+
+   /* if taking exposure in parallel thread, only need to wait for the
+    * exposure and readout to occur
+   */
+
+   if ( ! wait_flag){
+      t = exp_time + READOUT_TIME_SEC;
+   }
+   else{
+     if (strstr(exp_mode,EXP_MODE_SINGLE)!=NULL){
+
+     /* wait for the exposure, the readout, and the transfer */
+	 t = exp_time + READOUT_TIME_SEC + TRANSFER_TIME_SEC;
+     }
+     /* wait for the exposure and readout only, the transfer 
+      * will be executed later
+     */
+     else if (strstr(exp_mode,EXP_MODE_FIRST)!=NULL){
+	 t = exp_time + READOUT_TIME_SEC;
+     }
+     /* transfer of previous image occurs in parallel with new exposure.
+      *  Wait the longer of:
+      * (a) the exposure and readout times of the next exposure, or
+      * (b) the time to transfer the previous exposure.
+     */
+     else if (strstr(exp_mode,EXP_MODE_NEXT)!=NULL){
+	 if (exp_time + READOUT_TIME_SEC > TRANSFER_TIME_SEC){
+	   t = exp_time;
+	 }
+	 else{
+	   t = TRANSFER_TIME_SEC;
+	 }
+     }
+
+     /* no new exposure. Only wait for the transfer of the previous
+      * exposure
+     */
+     else if (strstr(exp_mode,EXP_MODE_LAST)!=NULL){
+	 t = TRANSFER_TIME_SEC;
+     }
+
+     else{
+	 fprintf(stderr,"%s: ERROR: unrecognized exposure mode [%s]\n",
+            "expose_timeout",exp_mode);
+	 t = -1;
+     }
+   }
+
+   return (t);
 }
 
 /*****************************************************/
@@ -448,7 +491,8 @@ double wait_exp_done(int expt)
 
      
 /*****************************************************/
-
+#if 0
+// not used for LS4 camera
 int init_camera()
 {
      char reply[MAXBUFSIZE];
@@ -459,7 +503,7 @@ int init_camera()
        fflush(stderr);
      }
 
-     if(do_camera_command(INIT_COMMAND,reply,CAMERA_INIT_TIMEOUT_SEC)!=0){
+     if(do_camera_command(INIT_COMMAND,reply,CAMERA_TIMEOUT_SEC)!=0){
        fprintf(stderr,"error sending camera init command\n");
        result = -1;
      }
@@ -479,7 +523,7 @@ int init_camera()
      return (result);
 
 }
-
+#endif
 /*****************************************************/
 
 int update_camera_status(Camera_Status *status)
@@ -489,7 +533,7 @@ int update_camera_status(Camera_Status *status)
 
      error_flag=0;
 
-     if(do_status_command(STATUS_COMMAND,reply,CAMERA_STATUS_TIMEOUT_SEC)!=0){
+     if(do_status_command(STATUS_COMMAND,reply,CAMERA_TIMEOUT_SEC)!=0){
        return(-1);
      }
      else {
@@ -540,7 +584,7 @@ void *do_camera_command_thread(void *args){
         *result = -1;
      }
      /* once the start semaphore posts, execute the command and then post to the
-      * done semaphre */
+      * done semaphore */
      else{
         *result = do_camera_command(command,reply, timeout_sec);
 	sem_post(done_semaphore);
@@ -613,7 +657,7 @@ int wait_camera_readout(Camera_Status *status)
     struct timeval t1,t2;
     int dt;
     int result=0;
-    int timeout_sec = READ_TIMEOUT_SEC;
+    int timeout_sec = READOUT_TIME_SEC;
 
     if (readout_pending){
       gettimeofday(&t1,NULL);
@@ -673,32 +717,18 @@ int wait_camera_readout(Camera_Status *status)
 int clear_camera()
 {
      char reply[MAXBUFSIZE];
+     char command_string[1024];
 
+     double timeout = CLEAR_TIME +  5;
+     sprintf(command_string,"%s %d",CLEAR_COMMAND,CLEAR_TIME);
 
-     if(do_camera_command(CLEAR_COMMAND,reply,CAMERA_CLEAR_TIMEOUT_SEC)!=0){
+     if(do_camera_command(command_string,reply,timeout)!=0){
        return(-1);
      }
      else {
        return(0);
      }
 
-}
-
-/*****************************************************/
-
-int bad_readout()
-{
-    if(cam_status.error_code>BAD_ERROR_CODE){
-      fprintf(stderr,"bad_readout: bad error code %d\n",cam_status.error_code);
-      return(1);
-    }
-    else if (cam_status.read_time>=BAD_READOUT_TIME){
-      fprintf(stderr,"bad_readout: long readout time : %7.3f\n",
-           cam_status.read_time);
-      return(1);
-    }
-
-    return(0);
 }
 
 /*****************************************************/

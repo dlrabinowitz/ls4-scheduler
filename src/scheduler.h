@@ -6,7 +6,6 @@
 
 */
 
-#define observer_home "/home/ls4/quest-src-lasilla"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,14 +16,14 @@
 #include <signal.h>
 #include "sky_utils.h"
 #include "socket.h"
-
+#include "scheduler_camera.h"
 
 #define False false
 #define True true
 
 #define SNE_SHIFT 0 /* set to 1 to shift paired fields by 1.0 deg, 0 for 0.5 deg */
 #define FAKE_RUN 0 /* set to 1 for simulated obs */
-#define UT_OFFSET 12.0 /* ut offset for debugging */
+#define UT_OFFSET 21.00 /* ut offset for debugging */
 #define DEEP_DITHER_ON 0 /* turn on dithering for deep coadds */
 #
 #define USE_TELESCOPE_OFFSETS 0 /* change to 1 to use telescope_offsets file for offset */
@@ -35,8 +34,6 @@
 
 #define POINTING_CORRECTIONS_ON 0 /* set to 1 to apply empirical pointing corrections*/
 #define TRACKING_CORRECTIONS_ON 0 /* set to 1 to apply empirical tracking corrections*/
-
-#define NUM_CAMERA_CLEARS 2 /* number of clears per camera clear */
 
 #define DEG_TO_RAD (3.14159/180.0)
 #define SIDEREAL_DAY_IN_HOURS 23.93446972
@@ -99,7 +96,6 @@
 #define USE_12DEG_START 1 /* 1 to use 12-deg twilight, 0 to use 18-deg twilight */
 #define STARTUP_TIME /*0.5*/0.0 /* hours to startup after end of twilight */
 #define MIN_EXECUTION_TIME 0.029 /* minimum time (hours) to make an observation */
-#define EXPOSURE_OVERHEAD 0.0125 /* time to readout exposure (hours) = 45 sec */
 #define FOCUS_OVERHEAD 0.00555 /* time to change focus (hours) = 20 sec */
 
 #define FLAT_DITHER_STEP 0.002778 /* 10 arcsec in deg */
@@ -369,7 +365,7 @@ int get_dither(int iteration, double *ra_dither, double *dec_dither, double step
 int init_fields(Field *sequence, int num_fields, 
                 Night_Times *nt, Night_Times *nt_5day,
 		Night_Times *nt_10day, Night_Times *nt_15day,
-		Site_Params *site, double jd);
+		Site_Params *site, double jd, Telescope_Status *tel_status);
 
 int moon_interference(Field *f, Night_Times *nt, double separation);
 
@@ -435,7 +431,7 @@ int get_telescope_focus (double *focus);
 
 int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    char *name, double *ut, double *jd,
-		    bool wait_flag, int *exp_error_code);
+		    bool wait_flag, int *exp_error_code, char *exp_mode);
 int get_filename(char *filename,struct tm *tm,int shutter);
 int imprint_fits_header(Fits_Header *header);
 double wait_exp_done(int expt);
@@ -450,6 +446,7 @@ int bad_readout();
 int get_filename(char *filename,struct tm *tm,int shutter);
 int wait_camera_readout(Camera_Status *status);
 int print_camera_status(Camera_Status *status, FILE *output);
+int expose_timeout (char *exp_mode, double exp_time, bool wait_flag);
 
 /* from scheduler_status.c*/
 
