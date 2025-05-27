@@ -170,8 +170,11 @@ int read_data(int s,        /* connected socket */
  	    bcount += br; /* increment byte counter */
  	    buf += br; /* move buffer ptr for next read */
  	}
- 	if (br < 0) /* signal an error to the caller */
+ 	if (br < 0){ /* signal an error to the caller */
+	    fprintf(stderr,"read error\n");fflush(stdout);
+	    perror("read error");
  	    return(-1);
+	}
         else if (*buf==0||br==0)
            return(bcount);
     }

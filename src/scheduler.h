@@ -352,7 +352,7 @@ int get_day_of_year(struct date_time *date);
 
 int observe_next_field(Field *sequence, int index, int index_prev, 
                 double jd, double *time_taken, 
-		Night_Times *nt, FILE *output,
+		Night_Times *nt, bool wait_flag, FILE *output,
 		Telescope_Status *tel_status,Camera_Status *cam_status,
                 Fits_Header *fits_header);
 
@@ -428,7 +428,7 @@ int get_telescope_focus (double *focus);
 
 
 /* from scheduler_camera.c */
-
+int init_semaphores();
 int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    char *name, double *ut, double *jd,
 		    bool wait_flag, int *exp_error_code, char *exp_mode);
@@ -446,7 +446,7 @@ int bad_readout();
 int get_filename(char *filename,struct tm *tm,int shutter);
 int wait_camera_readout(Camera_Status *status);
 int print_camera_status(Camera_Status *status, FILE *output);
-int expose_timeout (char *exp_mode, double exp_time, bool wait_flag);
+double expose_timeout (char *exp_mode, double exp_time, bool wait_flag);
 
 /* from scheduler_status.c*/
 

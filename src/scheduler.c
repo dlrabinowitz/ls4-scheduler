@@ -55,6 +55,10 @@
 */
 
 #include "scheduler.h"
+
+// do not wait for readout of exposure before moving to next field.
+
+#define WAIT_FLAG False
 //#define DEBUG 1
 
 #define LOOP_WAIT_SEC 60 /* seconds to wait between loops if no
@@ -103,6 +107,8 @@ int main(int argc, char **argv)
 #endif
     
 	init_status_names();
+
+	init_semaphores();
 
 #if FAKE_RUN    
         if(argc!=7&&argc!=6){
@@ -836,7 +842,7 @@ int main(int argc, char **argv)
                     /* reset offset_done flag to 0 if this is a new offset sequence */
                     else if(offset_done&&sequence[i].shutter==OFFSET_CODE)offset_done=0;
 
-                    if(observe_next_field(sequence,i,i_prev,jd,&dt,&nt,
+                    if(observe_next_field(sequence,i,i_prev,jd,&dt,&nt,WAIT_FLAG,
 			log_obs_out,&tel_status,&cam_status,&fits_header)!=0){
                        fprintf(stderr,"ERROR observing field %d\n",i);
                        fflush(stderr);
@@ -1393,13 +1399,20 @@ int adjust_date(struct date_time *date, int n_days)
    telescope. Then wait for the previous readout of the camera to
    complete. If the readout is bad, flag the previous exposure as
    bad so that it will be taken again later. Then take the next 
-   exposure and return when the readout begins. Return -1 if
-   telescope doesn't point or if camera doesn't respond correctly.
+   exposure. 
+   
+   If wait_flag is False,  return after the exposure time ends, but
+   before the  readout begins. Otherwise return when the readout 
+   also completes.
+
+   Return -1 if there is an error pointing the telescope or taking 
+   the exposure. 
+
    Print diagnostic messages to stderr. Print the status of each
-   field to output to serve as an exposure log. */
+   field to output (this serves as the  exposure log). */
 
 int observe_next_field(Field *sequence, int index, int index_prev,
-        double jd, double *dt, Night_Times *nt,
+        double jd, double *dt, Night_Times *nt, bool wait_flag,
 	FILE *output,Telescope_Status *tel_status, Camera_Status *cam_status,
         Fits_Header *fits_header)
 {
@@ -1416,7 +1429,7 @@ int observe_next_field(Field *sequence, int index, int index_prev,
     double split_expt,expt;
     int bad_read_count;
     int exp_error_code=0;
-    bool wait_flag = True;
+    //bool wait_flag = True;
     char exp_mode[256];
 
     // for now, always wait for complete readout and transfer before starting
@@ -1895,6 +1908,8 @@ fprintf(stderr,"HA = %7.3f,  expt = %7.3f,  LONG_EXPTIME = %7.3f\n",
 
     dt1=clock_difference(ut_prev,ut);
 
+    // DEBUG
+    fprintf(stderr,"observe_next_field: skipping clears\n");
     if(ut_prev<0.0||dt1>CLEAR_INTERVAL){
         if(ut_prev>0.0){
             fprintf(stderr,

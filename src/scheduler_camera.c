@@ -44,6 +44,91 @@ Camera_Status cam_status;
 
 /*****************************************************/
 
+/* 
+Take an exposure with specified parameters.  The exposure is 
+executed by sending an EXPOSE_COMMAND to the camera
+control program (ls4_ccp). The actions taken by ls4_ccp depend
+on the specified exposure mode. 
+
+Input parameters:
+  exposure time: 
+     The exposure time (in hours) is specified by 
+     (a) the Field structure (f->expt) , or else
+     (b) the value of *actual_expt. 
+     Choice (b) overides (a) except when *actual_expt == 0.0.
+
+  exp_mode: 
+     When ls4_ccp executes the EXPOSE_COMMAND, there
+     are three actions taken: expose, readout (to controller memory), and
+     fetch (from controller memory to host). The exposure mode determines
+     the sequencing of these actions:
+
+     EXP_MODE_SINGLE: ls4_ccp will completely expose, readout,
+     and fetch the new image data.
+
+     EXP_MODE_FIRST: ls4_ccp will completely expose and readout
+     an image, but will leave it unfetched in controller memory
+     (which can hold up to three images).
+
+     EXP_MODE_NEXT: ls4_ccp will completely expose and readout a
+     new image, but will leave this new image data unfetched in 
+     controller memory. Meanwhile, it will fetch the old image data 
+     left unfetched from the preceding exposure.
+
+     EXP_MODE_LAST: ls4_ccp will fetch the old image data from 
+     the previous exposure.
+
+     Normally, the fastest duty cycle is achieved using 
+     FIRST, NEXT, NEXT, ..., NEXT, LAST. 
+
+  wait_flag: 
+     If True, wait for a complete exposure and readout of the image
+     before returning. If False, return as soon as the exposure time
+     ends. Do not wait for readout. 
+     With wait_flag = False, the telesope can be moved to the next
+     position while the readout and fetch occur in a separate thread.
+
+Notes: 
+    1. If the anticipated time between exposures exceeds the sum of the
+    readout and fetch times (typically 25 sec), then specifying
+    exp_mode = EXP_MODE_SINGLE and wait_flag = False will yield the
+    same duty cycle as the mode sequence FIRST, NEXT, ... , NEXT, LAST.
+    Reserve the later mode sequence for fast cadence readouts of
+    repeated observations at the same pointing.
+
+    2. If wait_flag = False, this routine will return before the exposure
+    is readout. However, a check is made at a higher level
+    that the readout is complete before a new exposure is taken 
+    (see calls to wait_exp_done() in observe_next_field(), scheduler.c).
+
+    
+Returned parameters:
+
+  time of exposure: 
+    universal time (*ut) in hours  since 00:00:00 UT.
+    julian date (*jd).
+
+  error_code: not currently used
+
+Return value:
+  0 on success, -1 on failuer.
+
+
+*/
+
+int init_semaphores()
+{
+    if(verbose){
+        fprintf(stderr,"init_semaphores: initializing start_semaphore\n");
+    }
+    sem_init(&command_start_semaphore,0,0);
+
+    if(verbose){
+        fprintf(stderr,"init_semaphores: initializing done_semaphore\n");
+    }
+    sem_init(&command_done_semaphore,0,0);
+
+}
 
 int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    char *name, double *ut, double *jd,
@@ -57,7 +142,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     int e;
     double expt;
     int shutter;
-    int timeout = 0.0;
+    int timeout = 0;
     pthread_t command_thread;
 
     int result = 0;
@@ -139,10 +224,13 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
       fflush(stderr);
     }
 
-    if(imprint_fits_header(header)!=0){
-      fprintf(stderr,"take_exposure: could not imprint fits header\n");
-      return(-1);
-    }
+    // DEBUG
+    //
+    fprintf(stderr,"take_exposure: skipping imprint fits header\n");
+    //if(imprint_fits_header(header)!=0){
+    //  fprintf(stderr,"take_exposure: could not imprint fits header\n");
+    //  return(-1);
+    //}
 
     char shutter_state[12];
     if(shutter)
@@ -161,22 +249,13 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
      *
     */
     if(verbose){
-        fprintf(stderr,"take_exposure: initializing start_semaphore\n");
-    }
-    sem_init(&command_start_semaphore,0,0);
-
-    if(verbose){
-        fprintf(stderr,"take_exposure: initializing done_semaphore\n");
-    }
-    sem_init(&command_done_semaphore,0,0);
-
-    if(verbose){
         fprintf(stderr,"take_exposure: set readout_pending to True\n");
     }
     readout_pending = True;
 
     /* If wait_flag is False, then launch a new thread (command_thread) to execute 
-     * the call to do_camera_command. 
+     * the call to do_camera_command (which sends an EXPOSE_COMMAND to the camera
+     * control program (ls4_ccp). 
      *
      * Meanwhile, monitor the status of the camera. When the camera status show that  
      * the exposure time has elapsed (but the controller has not year read out the image),
@@ -189,6 +268,8 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
      * If wait flag is True, do not launch a new thread. Just execute the call to 
      * to do_camera_command and wait for it to complete before returning. Set
      * exp_error_code appropriately if do_camera_command returns with an error.
+     *
+     * Note that the action taken by 
     */
 
 
@@ -196,10 +277,15 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
      * command. This depends on the expoure mode, the exposure time, and the
      * choice for wait_flag
     */
+    if(verbose){
+	fprintf(stderr,"getting timeout for exp_mode [%s], expt [%7.3f], wait_flag [%d]\n",
+		exp_mode,expt,wait_flag);
+    }
+
     timeout = expose_timeout(exp_mode, expt, wait_flag);
 
     if(verbose){
-        fprintf(stderr,"take_exposure: timeout will be %7.3f sec\n",timeout);
+        fprintf(stderr,"take_exposure: timeout will be %d sec\n",timeout);
     }
 
     sprintf(command,"%s %s %9.3f %s %s",EXPOSE_COMMAND,shutter_state,expt,filename,exp_mode);
@@ -228,6 +314,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		       (void *)command_args)!=0){
          fprintf(stderr,"take_exposure: ERROR creating do_camera_command_thread\n");
          fflush(stderr);
+	 readout_pending = False;
 	 return -1;
        }
 
@@ -238,6 +325,10 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 
        // post to command_start_semaphore. This tells the do_camera_command_thread to start
        // executing the exposre command
+       if(verbose){
+           fprintf(stderr,"take_exposure: posting to start_semaphore\n");
+           fflush(stderr);
+       }
        sem_post(&command_start_semaphore);
 
        // record time at start of exposure
@@ -274,6 +365,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
          fprintf(stderr,"take_exposure: error sending exposure command : %s\n",command);
          fprintf(stderr,"take_exposure: reply was : %s\n",reply);
          *actual_expt=0.0;
+         readout_pending = False;
          return -1;
        }
        else{
@@ -298,7 +390,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 /*****************************************************/
 /* return total time to take an exposure. If the exposure occurs */
 
-int expose_timeout (char *exp_mode, double exp_time, bool wait_flag)
+double expose_timeout (char *exp_mode, double exp_time, bool wait_flag)
 {
    double t=0;
 
@@ -346,9 +438,11 @@ int expose_timeout (char *exp_mode, double exp_time, bool wait_flag)
 	 fprintf(stderr,"%s: ERROR: unrecognized exposure mode [%s]\n",
             "expose_timeout",exp_mode);
 	 t = -1;
+	 return (t);
      }
    }
 
+   t = t + 5.0;
    return (t);
 }
 
@@ -399,6 +493,8 @@ int imprint_fits_header(Fits_Header *header)
 
 /* wait for camera exposure to end while the command to take an
  * exposure occurs in a parallel thread (do_camera_command_thread). 
+ * This routine is used by the "take_exposure" command when
+ * the wait_flag argument is False. 
  *
  * The exposure state is determined by polling the camera status 
  * through a status socket distinct from the command socket.
@@ -567,14 +663,15 @@ void *do_camera_command_thread(void *args){
 
      *result = 0;
 
-     if(verbose1){
-          fprintf(stderr,"do_camera_command_thread: waiting for start_semaphore to post\n");
-          fflush(stderr);
-     }
 
      struct timespec t;
      t.tv_sec = timeout_sec;
      t.tv_nsec = 0;
+
+     if(verbose1){
+          fprintf(stderr,"do_camera_command_thread: waiting for start_semaphore to post with timeout %d sec\n",t.tv_sec);
+          fflush(stderr);
+     }
 
      /* wait for the start_semaphore to post, or else timeout */
      if ( sem_timedwait(start_semaphore,&t) != 0){
@@ -586,7 +683,20 @@ void *do_camera_command_thread(void *args){
      /* once the start semaphore posts, execute the command and then post to the
       * done semaphore */
      else{
+        if(verbose1){
+          fprintf(stderr,"do_camera_command_thread: sending command [%s] with timeout %d sec\n",
+			  command,timeout_sec);
+          fflush(stderr);
+        }
         *result = do_camera_command(command,reply, timeout_sec);
+        if(verbose1){
+          fprintf(stderr,"do_camera_command_thread: result is [%d] \n",*result);
+	  fflush(stderr);
+	}
+        if(verbose1){
+          fprintf(stderr,"do_camera_command_thread: posting to done_semaphore\n");
+	  fflush(stderr);
+	}
 	sem_post(done_semaphore);
      }
 
@@ -643,8 +753,12 @@ int do_command(char *command, char *reply, int timeout_sec, int port){
 /*****************************************************/
 
 /* wait for camera readout to end.
+ * This routine used by scheduler.c to decide when to begin a new observation.
+ * As long as the readout is complete, the telescope may be moved to a new position.
+ * A new exposure may also begin, depending on the exposure mode of the previous
+ * observatopn.
  *
- * It a readout is not pending, wait the the command_done_semaphore
+ * If a readout is not pending, wait the the command_done_semaphore
  * to post. This signifies the exposure and readout have completed.
  * Return with result = 0 if no timeout or other error occurs while
  * waiting for the readout. Otherwise return -1.
@@ -668,11 +782,15 @@ int wait_camera_readout(Camera_Status *status)
       /* wait for the done_semphore to post, or else timeout */
       struct timespec t;
       t.tv_sec = timeout_sec;
-      t.tv_nsec = 0;
+      t.tv_nsec = (timeout_sec - t.tv_sec)*1000000000;
 
       /* If a timeout or error occurs while waiting for ther done_semaphore to
        * post, return -1.
       */
+      if(verbose){
+	fprintf(stderr,"wait_camera_readout: waiting for done_semaphore to post with timeout %ld\n",t.tv_sec);
+	fflush(stderr);
+      }
       if ( sem_timedwait(&command_done_semaphore,&t) != 0){
         fprintf(stderr,"wait_camera_readout: error waiting for done_semaphore to post\n");
 	perror("timeout waiting for done_semaphore to post in wait_camera_readout");
@@ -698,7 +816,7 @@ int wait_camera_readout(Camera_Status *status)
 	  fflush(stderr);
        }
     }
-
+/*
     if(update_camera_status(NULL)!=0){
 	result=-1;
 	fprintf(stderr,"wait_camera_readout: could not update camera status\n");
@@ -707,7 +825,7 @@ int wait_camera_readout(Camera_Status *status)
     else{
 	*status  = cam_status;
     }
-
+*/
     return(result);
 
 }
