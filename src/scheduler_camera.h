@@ -22,8 +22,10 @@
 
 
 #define CLEAR_TIME 20 /* seconds required to clear camera  */
-#define NUM_CAMERA_CLEARS 2 /* number of clears per camera clear */
-#define READOUT_TIME_SEC 20
+// DEBUG
+#define NUM_CAMERA_CLEARS 0 /* number of clears per camera clear */
+//#define NUM_CAMERA_CLEARS 2 /* number of clears per camera clear */
+#define READOUT_TIME_SEC 40
 #define TRANSFER_TIME_SEC 10
 #define EXPOSURE_OVERHEAD ((READOUT_TIME_SEC + 5.0)/3600.0) /* hours */
 

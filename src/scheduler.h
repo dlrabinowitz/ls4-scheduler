@@ -14,6 +14,7 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <unistd.h>
 #include "sky_utils.h"
 #include "socket.h"
 #include "scheduler_camera.h"
@@ -439,9 +440,9 @@ int init_camera();
 int clear_camera();
 int update_camera_status(Camera_Status *cam_status);
 void *do_camera_command_thread(void *args);
-int do_status_command(char *command, char *reply, int timeout_sec);
-int do_camera_command(char *command, char *reply, int timeout_sec);
-int do_command(char *command, char *reply, int timeout_sec, int port);
+int do_status_command(char *command, char *reply, int timeout_sec,int id);
+int do_camera_command(char *command, char *reply, int timeout_sec, int id);
+int do_command(char *command, char *reply, int timeout_sec, int port, int id);
 int bad_readout();
 int get_filename(char *filename,struct tm *tm,int shutter);
 int wait_camera_readout(Camera_Status *status);

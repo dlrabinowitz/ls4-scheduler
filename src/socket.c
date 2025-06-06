@@ -15,7 +15,7 @@ extern int verbose1;
 int send_command(char *command, char *reply, char *machine, 
 			int port, int timeout_sec);
 void init_socket_status(int s,socket_status *s_status);
-int read_data(int s, char *buf, int n);
+int read_data(int s, char *buf, int n, int timeout_sec);
 int write_data(int s, char *buf, int n);
 int call_socket(char *hostname, u_short portnum, int read_timeout_sec);
 int establish(u_short portnum);
@@ -28,30 +28,27 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
 {
   int i,s;
   u_short p;
-  pid_t result, pid;
   int command_pipe[2];
-  double ut;
 
   for(i=0;i<MAXBUFSIZE;i++)reply[i]=0;
 
   if(strlen(command)>MAXBUFSIZE){
-     fprintf(stderr,"send_command: command size too long : $s\n",
-               command);
+     fprintf(stderr,"send_command[%d]: command size too long : %s\n",
+               port,command);
      return(-1);
   }
 
   if(verbose1){
-     ut=get_ut();
      fprintf(stderr,
-        "send_command: %9.6lf calling socket with machine %s port %d\n",
-         ut,machine,port);
+        "send_command [%d]: %12.6f calling socket with machine %s port %d\n",
+         port,get_ut(),machine,port);
      fflush(stderr);
   }
 
   p = port;
   if ((s= call_socket(machine,p,timeout_sec)) < 0) { 
-        fprintf(stderr,"send_command: could not open socket with machine %s port %d\n",
-             machine,port);
+        fprintf(stderr,"send_command [%d]: could not open socket with machine %s port %d\n",
+             port,machine,port);
         fflush(stderr);
         perror("send_command: call_socket");
         return(-1);
@@ -59,9 +56,8 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
 
 
   if(verbose1){
-  	    ut=get_ut();
-            fprintf(stderr,"send_command: %9.6lf writing command : %s\n",
-		ut,command);
+            fprintf(stderr,"send_command [%d]: %12.6f writing command : %s\n",
+		port,get_ut(),command);
             fflush(stderr);
   }
 
@@ -75,19 +71,17 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
   }
  
   if(verbose1){
-  	  ut=get_ut();
-          fprintf(stderr,"send_command: %9.6lf reading reply \n",ut);
+          fprintf(stderr,"send_command[%d]: %12.6f reading reply with timeout %d sec \n",port,get_ut(),timeout_sec);
           fflush(stderr);
   }
 
-  if(read_data(s,reply,MAXBUFSIZE)<=0){
-          fprintf(stderr,"send_command: can't read command reply\n");
+  if(read_data(s,reply,MAXBUFSIZE,timeout_sec)<=0){
+          fprintf(stderr,"send_command[%d]: error reading command reply\n",port);fflush(stderr);
           return(-1);
   }
 
   if(verbose1){
-  	  ut=get_ut();
-          fprintf(stderr,"send_command: %9.6lf reply is %s",ut,reply);
+          fprintf(stderr,"send_command[%d]: %12.6f reply is %s",port,get_ut(),reply);
           fflush(stderr);
   }
 
@@ -158,20 +152,48 @@ void init_socket_status(int s,socket_status *s_status)
 /************************************************************/
 int read_data(int s,        /* connected socket */
 	      char *buf,    /* pointer to the buffer */
-	      int n)          /* number of characters (bytes) we want */
+	      int n,          /* number of characters (bytes) we want */
+	      int timeout_sec /* timeout for receiving data */
+	     )
 { 
     int bcount, /* counts bytes read */
     br; /* bytes read this pass */
+    struct timeval tv;
+    long int t,t_start,t_end;
+
+    if (timeout_sec <= 0) {
+	fprintf(stderr,"timeout [%d] <= 0\n",timeout_sec);fflush(stderr);
+ 	return(-1);
+    }
+
+    if(verbose1){
+        fprintf(stderr,"read_data: reading up to %d bytes with timeout %d sec\n",n,timeout_sec);
+        fflush(stderr);
+    }
 
     bcount= 0;
     br= 0;
-    while (bcount < n) { /* loop until full buffer */
+    gettimeofday(&tv,NULL);
+    t_start = tv.tv_sec;
+    t = t_start;
+    t_end = t_start + timeout_sec;
+    while (bcount < n && t < t_end) { /* loop until full buffer */
  	if ((br= read(s,buf,n-bcount)) > 0) {
  	    bcount += br; /* increment byte counter */
+	    if(verbose1){
+	      fprintf(stderr,"read_data: %d/%d bytes read\n",bcount,n);
+	      fflush(stderr);
+	    }
  	    buf += br; /* move buffer ptr for next read */
+	    gettimeofday(&tv,NULL);
+	    t = tv.tv_sec;
  	}
  	if (br < 0){ /* signal an error to the caller */
 	    fprintf(stderr,"read error\n");fflush(stdout);
+	    if(verbose1){
+	      fprintf(stderr,"read_data: only %d/%d bytes read\n",bcount,n);
+	      fflush(stderr);
+	    }
 	    perror("read error");
  	    return(-1);
 	}
@@ -179,6 +201,11 @@ int read_data(int s,        /* connected socket */
            return(bcount);
     }
     
+    if (t >= t_end ){
+       fprintf(stderr,"timeout reading %d btyes, only %d read\n",n,bcount);fflush(stdout);
+       return (-1);
+    }
+
     return(bcount);
  }
 

@@ -20,6 +20,7 @@ typedef struct{
    int timeout;
    sem_t *start_semaphore;
    sem_t *done_semaphore;
+   int command_id;
 } Do_Command_Args;
 
 // semaphores used to synchronize do_camera_command_thread
@@ -42,6 +43,7 @@ struct timeval t_exp_start;
 
 Camera_Status cam_status;
 
+int command_id = 0;
 /*****************************************************/
 
 /* 
@@ -144,6 +146,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     int shutter;
     int timeout = 0;
     pthread_t command_thread;
+    double t;
 
     int result = 0;
     *exp_error_code = 0;
@@ -309,6 +312,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        command_args->timeout = timeout;
        command_args->start_semaphore = &command_start_semaphore;
        command_args->done_semaphore = &command_done_semaphore;
+       command_args->command_id = command_id++;
 
        if(pthread_create(&thread_id,NULL,do_camera_command_thread,\
 		       (void *)command_args)!=0){
@@ -326,7 +330,8 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        // post to command_start_semaphore. This tells the do_camera_command_thread to start
        // executing the exposre command
        if(verbose){
-           fprintf(stderr,"take_exposure: posting to start_semaphore\n");
+	   t = get_ut();
+           fprintf(stderr,"take_exposure: time %12.6f : posting to start_semaphore\n",t);
            fflush(stderr);
        }
        sem_post(&command_start_semaphore);
@@ -335,20 +340,20 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        gettimeofday(&t_exp_start, NULL);
 
        if(verbose){
-           fprintf(stderr,"take_exposure: waiting for exposure time to end\n");
+           fprintf(stderr,"take_exposure: time %12.6f : waiting for exposure time to end\n",get_ut());
            fflush(stderr);
        }
 
        *actual_expt = wait_exp_done(expt);
        if (*actual_expt < 0){
-          fprintf(stderr,"take_exposure: error waiting for exposure to end\n");
+          fprintf(stderr,"take_exposure: time %12.6f : error waiting for exposure to end\n",get_ut());
           fflush(stderr);
 	  *actual_expt = 0;
 	  return -1;
        }
        if(verbose){
-           fprintf(stderr,"take_exposure: waited  %7.3f sec for exposure time to end\n",
-                   *actual_expt);
+           fprintf(stderr,"take_exposure: time %12.6f : waited  %7.3f sec for exposure time to end\n",
+                   get_ut(),*actual_expt);
            fflush(stderr);
        }
     }
@@ -361,7 +366,8 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        // record time at start of exposure
        gettimeofday(&t_exp_start, NULL);
 
-       if(do_camera_command(command,reply,timeout)!=0){
+       command_id++;
+       if(do_camera_command(command,reply,timeout,command_id)!=0){
          fprintf(stderr,"take_exposure: error sending exposure command : %s\n",command);
          fprintf(stderr,"take_exposure: reply was : %s\n",reply);
          *actual_expt=0.0;
@@ -475,11 +481,12 @@ int imprint_fits_header(Fits_Header *header)
     char reply[MAXBUFSIZE];
     int i;
 
+    command_id++;
     for(i=0;i<header->num_words;i++){
       sprintf(command,"%s %s %s",
 		HEADER_COMMAND,header->fits_word[i].keyword,
                 header->fits_word[i].value);
-      if(do_camera_command(command,reply,CAMERA_TIMEOUT_SEC)!=0){
+      if(do_camera_command(command,reply,CAMERA_TIMEOUT_SEC,command_id)!=0){
         fprintf(stderr,
           "imprint_fits_header: error sending command %s\n",command);
         return(-1);
@@ -518,7 +525,7 @@ double wait_exp_done(int expt)
     timeout_sec = expt + 5;
 
     if(verbose){
-         fprintf(stderr,"wait_exp_done: waiting for camera exposure to end\n");
+         fprintf(stderr,"wait_exp_done: time %12.6f : waiting for camera exposure to end\n",get_ut());
          fflush(stderr);
     }
 
@@ -553,10 +560,10 @@ double wait_exp_done(int expt)
 
 	if (! done ){
 	   if (t < t_end){
-	     fprintf(stderr,"wait_exp_done: ERROR waiting for exposure to end\n");
+	     fprintf(stderr,"wait_exp_done: time %12.6f : ERROR waiting for exposure to end\n",get_ut());
 	   }
 	   else{
-	     fprintf(stderr,"wait_exp_done: timeout waiting for exposure to end\n");
+	     fprintf(stderr,"wait_exp_done: time %12.6f : timeout waiting for exposure to end\n",get_ut());
 	   }
 	   fflush(stderr);
 	}
@@ -629,7 +636,8 @@ int update_camera_status(Camera_Status *status)
 
      error_flag=0;
 
-     if(do_status_command(STATUS_COMMAND,reply,CAMERA_TIMEOUT_SEC)!=0){
+     command_id++;
+     if(do_status_command(STATUS_COMMAND,reply,CAMERA_TIMEOUT_SEC,command_id)!=0){
        return(-1);
      }
      else {
@@ -652,6 +660,8 @@ void *do_camera_command_thread(void *args){
      char *reply;
      sem_t *done_semaphore;
      sem_t *start_semaphore;
+     double t_start, t_end;
+     int id;
 
      command_args = (Do_Command_Args *)args;
      command = command_args->command;
@@ -659,6 +669,7 @@ void *do_camera_command_thread(void *args){
      timeout_sec =  command_args->timeout;
      start_semaphore = command_args->start_semaphore;
      done_semaphore = command_args->done_semaphore;
+     id = command_args->command_id;
 
 
      *result = 0;
@@ -669,13 +680,14 @@ void *do_camera_command_thread(void *args){
      t.tv_nsec = 0;
 
      if(verbose1){
-          fprintf(stderr,"do_camera_command_thread: waiting for start_semaphore to post with timeout %d sec\n",t.tv_sec);
+          fprintf(stderr,"do_camera_command_thread[%d]: time %12.6f : waiting for start_semaphore to post with timeout %ld sec\n",
+			  id,get_ut(),t.tv_sec);
           fflush(stderr);
      }
 
      /* wait for the start_semaphore to post, or else timeout */
      if ( sem_timedwait(start_semaphore,&t) != 0){
-        fprintf(stderr,"do_camera_command_thread: error waiting for start_semaphore to post\n");
+        fprintf(stderr,"do_camera_command_thread[%d]: time %12.6f : error waiting for start_semaphore to post\n",id,get_ut());
 	perror("timeout waiting for start_semaphore to post in do_camera_command");
         fflush(stderr);
         *result = -1;
@@ -683,18 +695,20 @@ void *do_camera_command_thread(void *args){
      /* once the start semaphore posts, execute the command and then post to the
       * done semaphore */
      else{
+	t_start = get_ut();
         if(verbose1){
-          fprintf(stderr,"do_camera_command_thread: sending command [%s] with timeout %d sec\n",
-			  command,timeout_sec);
+          fprintf(stderr,"do_camera_command_thread[%d]: start time %12.6f : sending command [%s] with timeout %d sec\n",
+			  id,t_start,command,timeout_sec);
           fflush(stderr);
         }
-        *result = do_camera_command(command,reply, timeout_sec);
+        *result = do_camera_command(command,reply, timeout_sec,id);
+	t_end = get_ut();
         if(verbose1){
-          fprintf(stderr,"do_camera_command_thread: result is [%d] \n",*result);
+          fprintf(stderr,"do_camera_command_thread[%d]: done time %12.6f : result is [%d] \n",id,t_end,*result);
 	  fflush(stderr);
 	}
         if(verbose1){
-          fprintf(stderr,"do_camera_command_thread: posting to done_semaphore\n");
+          fprintf(stderr,"do_camera_command_thread[%d]: time %12.6f : posting to done_semaphore\n", id,t_end);
 	  fflush(stderr);
 	}
 	sem_post(done_semaphore);
@@ -703,26 +717,27 @@ void *do_camera_command_thread(void *args){
      pthread_exit(result);
 }
 
-int do_status_command(char *command, char *reply, int timeout_sec){
-    return do_command(command, reply, timeout_sec, STATUS_PORT);
+int do_status_command(char *command, char *reply, int timeout_sec,int id){
+    return do_command(command, reply, timeout_sec, STATUS_PORT,id);
 }
 
-int do_camera_command(char *command, char *reply, int timeout_sec){
-    return do_command(command, reply, timeout_sec, COMMAND_PORT);
+int do_camera_command(char *command, char *reply, int timeout_sec, int id){
+    return do_command(command, reply, timeout_sec, COMMAND_PORT,id);
 }
 
-int do_command(char *command, char *reply, int timeout_sec, int port){
+int do_command(char *command, char *reply, int timeout_sec, int port,int id){
 
      int returnval = 0;
 
      if(verbose1){
-          fprintf(stderr,"do_camera_command: sending command %s\n",command);
+          fprintf(stderr,"do_command[%d]: time %12.6f : sending command %s with timeout %d sec\n",
+			  id,get_ut(),command,timeout_sec);
           fflush(stderr);
      }
 
      if(send_command(command,reply,MACHINE_NAME,port, timeout_sec)!=0){
          fprintf(stderr,
-          "do_camera_command: error sending command %s\n", command);
+          "do_command[%d]: error sending command %s\n", id,command);
          returnval = -1;
          fflush(stderr);
      }
@@ -733,14 +748,14 @@ int do_command(char *command, char *reply, int timeout_sec, int port){
        //if(strstr(reply,ERROR_REPLY)!=NULL || strlen(reply) == 0 ){
        if( strstr(reply,DONE_REPLY)==NULL || strlen(reply) == 0  || strstr(reply,"ERROR_REPLY") != NULL){
          fprintf(stderr,
-            "do_camera_command: command [%s] returns error: %s\n", 
-             command,reply);
+            "do_command[%d]: time %12.6f : command [%s] returns error: %s\n", 
+             id,get_ut(), command,reply);
          fflush(stderr);
 	 returnval = -1;
        }
        else {
          if(verbose1){
-           fprintf(stderr,"do_camera_command: reply was %s\n",reply);
+           fprintf(stderr,"do_command[%d]: time %12.6f : reply was %s\n",id,get_ut(),reply);
            fflush(stderr);
          }
        }
@@ -769,31 +784,43 @@ int do_command(char *command, char *reply, int timeout_sec, int port){
 int wait_camera_readout(Camera_Status *status)
 {
     struct timeval t1,t2;
-    int dt;
+    double t,t_start,t_end,dt;
     int result=0;
     int timeout_sec = READOUT_TIME_SEC;
 
     if (readout_pending){
       gettimeofday(&t1,NULL);
       if(verbose){
-	fprintf(stderr,"wait_camera_readout: waiting for readout to complete\n");
+	fprintf(stderr,"wait_camera_readout: time %12.6f : waiting for readout to complete\n",get_ut());
 	fflush(stderr);
       }
       /* wait for the done_semphore to post, or else timeout */
-      struct timespec t;
-      t.tv_sec = timeout_sec;
-      t.tv_nsec = (timeout_sec - t.tv_sec)*1000000000;
 
+      t_start = get_ut();
+      if(verbose){
+	fprintf(stderr,"wait_camera_readout: time = %12.6f : waiting for done_semaphore to post with timeout %d\n",t_start,timeout_sec);
+	fflush(stderr);
+      }
+      //HERE
       /* If a timeout or error occurs while waiting for ther done_semaphore to
        * post, return -1.
       */
-      if(verbose){
-	fprintf(stderr,"wait_camera_readout: waiting for done_semaphore to post with timeout %ld\n",t.tv_sec);
-	fflush(stderr);
+      t = t_start*3600.0;
+      t_end = t + timeout_sec;
+      bool done = False;
+      while (t < t_end ){
+         if ( sem_trywait(&command_done_semaphore) != 0){
+	    usleep(100000);
+	    t = t + 0.1;
+	 }
+	 else{
+	    done = True;
+	 }   
       }
-      if ( sem_timedwait(&command_done_semaphore,&t) != 0){
-        fprintf(stderr,"wait_camera_readout: error waiting for done_semaphore to post\n");
-	perror("timeout waiting for done_semaphore to post in wait_camera_readout");
+      t_end = get_ut();
+      dt = (t_end - t_start) * 3600.0;
+      if ( ! done ){
+        fprintf(stderr,"wait_camera_readout: time = %12.6f: dt = %12.6f: error waiting for done_semaphore to post\n",t_end,dt);
         fflush(stderr);
         result = -1;
       }
@@ -802,10 +829,9 @@ int wait_camera_readout(Camera_Status *status)
       */
       else{
 	readout_pending = False;
-        gettimeofday(&t2,NULL);
-        dt = t2.tv_sec - t1.tv_sec;
         if(verbose){
-     	  fprintf(stderr,"wait_camera_readout: waited %d sec for readout to end\n",dt);
+     	  fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",t_end);
+     	  fprintf(stderr,"wait_camera_readout: time = %12.6f : waited %7.3f sec for readout to end\n",t_end,dt);
 	  fflush(stderr);
         }
       }
@@ -840,7 +866,8 @@ int clear_camera()
      double timeout = CLEAR_TIME +  5;
      sprintf(command_string,"%s %d",CLEAR_COMMAND,CLEAR_TIME);
 
-     if(do_camera_command(command_string,reply,timeout)!=0){
+     command_id++;
+     if(do_camera_command(command_string,reply,timeout,command_id)!=0){
        return(-1);
      }
      else {
