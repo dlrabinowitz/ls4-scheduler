@@ -229,11 +229,11 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 
     // DEBUG
     //
-    fprintf(stderr,"take_exposure: skipping imprint fits header\n");
-    //if(imprint_fits_header(header)!=0){
-    //  fprintf(stderr,"take_exposure: could not imprint fits header\n");
-    //  return(-1);
-    //}
+    //fprintf(stderr,"take_exposure: skipping imprint fits header\n");
+    if(imprint_fits_header(header)!=0){
+      fprintf(stderr,"take_exposure: could not imprint fits header\n");
+      return(-1);
+    }
 
     char shutter_state[12];
     if(shutter)
@@ -474,6 +474,11 @@ int get_filename(char *filename,struct tm *tm,int shutter)
 }
 
 /*****************************************************/
+
+/* The camera controller updates the image fits header with info specific to the camera status. 
+ * This command to add info the header maintained by the controller. This additional
+ * info will be save to the fits header when the image is read out and saved by the controller
+*/
 
 int imprint_fits_header(Fits_Header *header)
 {
