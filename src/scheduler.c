@@ -63,8 +63,8 @@
 
 #define LOOP_WAIT_SEC 60 /* seconds to wait between loops if no
                            field selected */
-int verbose=1;
-int verbose1 = 1; /* set to 1 for very verbose */
+int verbose=0;
+int verbose1 = 0; /* set to 1 for very verbose */
 int pause_flag=0;
 int focus_done=0;
 int offset_done=0;
@@ -102,6 +102,8 @@ int main(int argc, char **argv)
         double dt;
         int telescope_ready,bad_weather,delay_sec;
         Fits_Header fits_header;
+        char exp_mode[256];
+        bool first_exposure = True;
 #if FAKE_RUN
         FILE *weather_input;
 #endif
@@ -842,8 +844,15 @@ int main(int argc, char **argv)
                     /* reset offset_done flag to 0 if this is a new offset sequence */
                     else if(offset_done&&sequence[i].shutter==OFFSET_CODE)offset_done=0;
 
+		    if (first_exposure){
+		        strcpy(exp_mode,EXP_MODE_FIRST);
+			first_exposure = False;
+		    }
+		    else{
+		        strcpy(exp_mode,EXP_MODE_NEXT);
+                    }
                     if(observe_next_field(sequence,i,i_prev,jd,&dt,&nt,WAIT_FLAG,
-			log_obs_out,&tel_status,&cam_status,&fits_header)!=0){
+			log_obs_out,&tel_status,&cam_status,&fits_header,exp_mode)!=0){
                        fprintf(stderr,"ERROR observing field %d\n",i);
                        fflush(stderr);
                        if(telescope_ready&&stop_flag==0){
@@ -1414,7 +1423,7 @@ int adjust_date(struct date_time *date, int n_days)
 int observe_next_field(Field *sequence, int index, int index_prev,
         double jd, double *dt, Night_Times *nt, bool wait_flag,
 	FILE *output,Telescope_Status *tel_status, Camera_Status *cam_status,
-        Fits_Header *fits_header)
+        Fits_Header *fits_header, char *exp_mode)
 {
     double lst,ut,actual_expt,ha,ra_correction,dec_correction,ra,dec,dt1;
     double ra_rate,dec_rate; /* ra and dec tracking rate corrections in arcsec/hour */
@@ -1430,14 +1439,7 @@ int observe_next_field(Field *sequence, int index, int index_prev,
     int bad_read_count;
     int exp_error_code=0;
     //bool wait_flag = True;
-    char exp_mode[256];
 
-    // for now, always wait for complete readout and transfer before starting
-    // new exposure. For faster duty cycles, use EXP_MODE_FIRST for first exposure
-    // , EXP_MODE_NEXT for subsequebnt exposures, and EXP_MODE_LAST for last 
-    // exposure in a sequence.
-      
-    strcpy(exp_mode,EXP_MODE_SINGLE);
     ra_dither=0.0;
     dec_dither=0.0;
     ra_rate=0.0;

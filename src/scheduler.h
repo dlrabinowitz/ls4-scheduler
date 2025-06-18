@@ -355,7 +355,7 @@ int observe_next_field(Field *sequence, int index, int index_prev,
                 double jd, double *time_taken, 
 		Night_Times *nt, bool wait_flag, FILE *output,
 		Telescope_Status *tel_status,Camera_Status *cam_status,
-                Fits_Header *fits_header);
+                Fits_Header *fits_header, char *exp_mode);
 
 int do_stop(double ut,Telescope_Status *status);
 

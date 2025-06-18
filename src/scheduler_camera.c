@@ -530,7 +530,9 @@ double wait_exp_done(int expt)
     timeout_sec = expt + 5;
 
     if(verbose){
-         fprintf(stderr,"wait_exp_done: time %12.6f : waiting for camera exposure to end\n",get_ut());
+         fprintf(stderr,
+	     "wait_exp_done: time %12.6f : waiting up to %d sec for camera exposure to end\n",
+	     get_ut(),timeout_sec);
          fflush(stderr);
     }
 
@@ -557,6 +559,7 @@ double wait_exp_done(int expt)
 	     done = True;
 	  }
 	  else{
+	    fprintf("cam_status.state_val[EXPOSING] = %s\n",cam_status.state_val[EXPOSING]);
 	    usleep(100000);
 	    gettimeofday(&t_val,NULL);
 	    t = t_val.tv_sec;
@@ -813,13 +816,21 @@ int wait_camera_readout(Camera_Status *status)
       t = t_start*3600.0;
       t_end = t + timeout_sec;
       bool done = False;
-      while (t < t_end ){
+      while (t < t_end  && !done){
          if ( sem_trywait(&command_done_semaphore) != 0){
+	    if(verbose){
+	      fprintf(stderr,"wait_camera_readout: time = %12.6f : still waiting for done_semaphore\n",
+			      get_ut());
+	    }
 	    usleep(100000);
 	    t = t + 0.1;
 	 }
 	 else{
 	    done = True;
+	    if(verbose){
+	      fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",
+			      get_ut());
+	    }
 	 }   
       }
       t_end = get_ut();
