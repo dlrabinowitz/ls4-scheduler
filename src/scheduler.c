@@ -1119,14 +1119,18 @@ int do_exit(int code)
 {
 #if FAKE_RUN
 #else
+     if(verbose){
+        fprintf(stderr,"do_exit: stopping telescope\n");
+     }
      stop_telescope();
 #endif
+     if(verbose){
+        fprintf(stderr,"do_exit: closing files\n");
+     }
      close_files();
 
-     if(verbose){
-        fprintf(stderr,"do_exit: do_exiting\n");
-        fflush(stderr);
-     }
+     fprintf(stderr,"exiting\n");
+     fflush(stderr);
 
      exit(code);
 }

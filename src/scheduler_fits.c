@@ -7,20 +7,6 @@
 
 #include "scheduler.h"
 
-#if 0
-#define FILTERNAME_KEYWORD "filterna"
-#define FILTER_ID_KEYWORD "filterid"
-#define LST_KEYWORD "lst"
-#define HA_KEYWORD "ha"
-#define IMAGETYPE_KEYWORD "imagetyp"
-#define DARKFILE_KEYWORD "darkfile"
-#define FLATFILE_KEYWORD "flatfile"
-#define SEQUENCE_KEYWORD "sequence"
-#define RA_KEYWORD "ra"
-#define DEC_KEYWORD "dec"
-#define FOCUS_KEYWORD "focus"
-#endif
-
 #define BLANK_VALUE "UNKNOWN"
 
 
@@ -40,7 +26,7 @@ int update_fits_header(Fits_Header *header, char *keyword, char *value)
 
     if(strlen(value)==0||strcmp(value," ")==0)strcpy(value,BLANK_VALUE);
 
-    if(verbose1){
+    if(verbose){
        fprintf(stderr,"update_fits_header: setting %s to %s\n",
          keyword,value);
     }
@@ -59,7 +45,7 @@ int update_fits_header(Fits_Header *header, char *keyword, char *value)
 
     strcpy(header->fits_word[i].value,value);
 
-    if(verbose1){
+    if(verbose){
        fprintf(stderr,"update_fits_header: %d %s %s\n",
          i,header->fits_word[i].keyword,header->fits_word[i].value);
     }
