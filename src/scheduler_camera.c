@@ -120,12 +120,12 @@ Return value:
 
 int init_semaphores()
 {
-    if(verbose){
+    if(verbose1){
         fprintf(stderr,"init_semaphores: initializing start_semaphore\n");
     }
     sem_init(&command_start_semaphore,0,0);
 
-    if(verbose){
+    if(verbose1){
         fprintf(stderr,"init_semaphores: initializing done_semaphore\n");
     }
     sem_init(&command_done_semaphore,0,0);
@@ -222,7 +222,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        return(-1);
     }
 
-    if(verbose){
+    if(verbose1){
       fprintf(stderr,"take_exposure: imprinting fits header\n");
       fflush(stderr);
     }
@@ -251,7 +251,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
      * If the thread is  not used, neither will be posted.
      *
     */
-    if(verbose){
+    if(verbose1){
         fprintf(stderr,"take_exposure: set readout_pending to True\n");
     }
     readout_pending = True;
@@ -280,25 +280,35 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
      * command. This depends on the expoure mode, the exposure time, and the
      * choice for wait_flag
     */
-    if(verbose){
+    if(verbose1){
 	fprintf(stderr,"getting timeout for exp_mode [%s], expt [%7.3f], wait_flag [%d]\n",
 		exp_mode,expt,wait_flag);
     }
 
     timeout = expose_timeout(exp_mode, expt, wait_flag);
 
-    if(verbose){
+    if(verbose1){
         fprintf(stderr,"take_exposure: timeout will be %d sec\n",timeout);
     }
 
-    sprintf(command,"%s %s %9.3f %s %s",EXPOSE_COMMAND,shutter_state,expt,filename,exp_mode);
+    if (strlen(EXPOSE_COMMAND) + strlen(shutter_state) + 9 + strlen(filename) + strlen(exp_mode) < 1024){
+        sprintf(command,"%s %s %9.3f %s %s",EXPOSE_COMMAND,shutter_state,expt,filename,exp_mode);
+    }
+    else{
+         fprintf(stderr,"take_exposure: command length too long : [%s %s %9.3f %s %s]\n",
+			 EXPOSE_COMMAND,shutter_state,expt,filename,exp_mode);
+         fflush(stderr);
+	 readout_pending = False;
+	 return -1;
+    }
 
-    if(verbose){
+
+    if(verbose1){
         fprintf(stderr,"take_exposure: %s sending command %s\n",date_string,command);
     }
 
     if (! wait_flag){
-       if(verbose){
+       if(verbose1){
          fprintf(stderr,"take_exposure: using a thread to execute the exposure command");
          fflush(stderr);
        }
@@ -322,14 +332,14 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 	 return -1;
        }
 
-       if(verbose){
+       if(verbose1){
            fprintf(stderr,"take_exposure: do_camera_command_thread running\n");
            fflush(stderr);
        }
 
        // post to command_start_semaphore. This tells the do_camera_command_thread to start
        // executing the exposre command
-       if(verbose){
+       if(verbose1){
 	   t = get_ut();
            fprintf(stderr,"take_exposure: time %12.6f : posting to start_semaphore\n",t);
            fflush(stderr);
@@ -339,7 +349,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        // record time at start of exposure
        gettimeofday(&t_exp_start, NULL);
 
-       if(verbose){
+       if(verbose1){
            fprintf(stderr,"take_exposure: time %12.6f : waiting for exposure time to end\n",get_ut());
            fflush(stderr);
        }
@@ -351,14 +361,14 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 	  *actual_expt = 0;
 	  return -1;
        }
-       if(verbose){
+       if(verbose1){
            fprintf(stderr,"take_exposure: time %12.6f : waited  %7.3f sec for exposure time to end\n",
                    get_ut(),*actual_expt);
            fflush(stderr);
        }
     }
     else{
-       if(verbose){
+       if(verbose1){
          fprintf(stderr,"take_exposure: executing do_camera_command with wait = True");
          fflush(stderr);
        }
@@ -529,7 +539,7 @@ double wait_exp_done(int expt)
     act_expt=0;
     timeout_sec = expt + 5;
 
-    if(verbose){
+    if(verbose1){
          fprintf(stderr,
 	     "wait_exp_done: time %12.6f : waiting up to %d sec for camera exposure to end\n",
 	     get_ut(),timeout_sec);
@@ -559,7 +569,7 @@ double wait_exp_done(int expt)
 	     done = True;
 	  }
 	  else{
-	    fprintf("cam_status.state_val[EXPOSING] = %s\n",cam_status.state_val[EXPOSING]);
+	    fprintf(stderr,"cam_status.state_val[EXPOSING] = %d\n",cam_status.state_val[EXPOSING]);
 	    usleep(100000);
 	    gettimeofday(&t_val,NULL);
 	    t = t_val.tv_sec;
@@ -577,7 +587,7 @@ double wait_exp_done(int expt)
 	}
 	else{
 
-	   if(verbose){
+	   if(verbose1){
 	     fprintf(stderr,
 	       "wait_camera_readout: exposure successfully ended in  %d sec\n",
 		t - t_start);
@@ -805,7 +815,7 @@ int wait_camera_readout(Camera_Status *status)
       /* wait for the done_semphore to post, or else timeout */
 
       t_start = get_ut();
-      if(verbose){
+      if(verbose1){
 	fprintf(stderr,"wait_camera_readout: time = %12.6f : waiting for done_semaphore to post with timeout %d\n",t_start,timeout_sec);
 	fflush(stderr);
       }
@@ -818,7 +828,7 @@ int wait_camera_readout(Camera_Status *status)
       bool done = False;
       while (t < t_end  && !done){
          if ( sem_trywait(&command_done_semaphore) != 0){
-	    if(verbose){
+	    if(verbose1){
 	      fprintf(stderr,"wait_camera_readout: time = %12.6f : still waiting for done_semaphore\n",
 			      get_ut());
 	    }
@@ -827,7 +837,7 @@ int wait_camera_readout(Camera_Status *status)
 	 }
 	 else{
 	    done = True;
-	    if(verbose){
+	    if(verbose1){
 	      fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",
 			      get_ut());
 	    }
@@ -845,7 +855,7 @@ int wait_camera_readout(Camera_Status *status)
       */
       else{
 	readout_pending = False;
-        if(verbose){
+        if(verbose1){
      	  fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",t_end);
      	  fprintf(stderr,"wait_camera_readout: time = %12.6f : waited %7.3f sec for readout to end\n",t_end,dt);
 	  fflush(stderr);
@@ -853,7 +863,7 @@ int wait_camera_readout(Camera_Status *status)
       }
     }
     else{
-       if(verbose){
+       if(verbose1){
 	  fprintf(stderr,"wait_camera_readout: no exposure currently reading out\n");
 	  fflush(stderr);
        }

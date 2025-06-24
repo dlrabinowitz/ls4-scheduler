@@ -1158,6 +1158,7 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 		*elevsea = 2215.;
 		*elev = 2215.; /* for ocean horizon, not Andes! */
 		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
+		fflush(stdout);
 	}
         else if (obs_code[0] == 'T') {
 		strcpy(site_name,"McDonald Observatory");

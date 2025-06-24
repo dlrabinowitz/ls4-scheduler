@@ -26,7 +26,7 @@ int install_signal_handlers()
 
     if(signal(SIGTERM,sigterm_handler)==SIG_ERR){
       fprintf(stderr,
-          "install_signal_handler: ERROR installing sigterm_handler\n");
+          "/install_signal_handler: ERROR installing sigterm_handler\n");
       fflush(stderr);
       return(-1);
     }
@@ -55,7 +55,7 @@ void sigterm_handler()
    fflush(stdout);
    fflush(stderr);
 
-   fprintf(stderr,"sigterm_handler: terminate signal received\n");
+   fprintf(stderr,"\nsigterm_handler: terminate signal received\n");
    fflush(stderr);
 
    do_exit(1);
@@ -71,7 +71,7 @@ void sigusr1_handler()
    fflush(stderr);
 
    if(verbose){
-     fprintf(stderr,"sigusr1_handler: pause signal received\n");
+     fprintf(stderr,"\nsigusr1_handler: pause signal received\n");
      fflush(stderr);
    }
 
@@ -90,7 +90,7 @@ void sigusr2_handler()
    fflush(stderr);
 
    if(verbose){
-     fprintf(stderr,"sigusr1_handler: resume signal received\n");
+     fprintf(stderr,"\nsigusr1_handler: resume signal received\n");
      fflush(stderr);
    }
 
