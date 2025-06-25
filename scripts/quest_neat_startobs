@@ -61,7 +61,7 @@ set SCRIPT_LOG = "$d.log"
 #set OFFSET_LOG = "/home/observer/logs/telescope_offsets.log"
 #set STARTOBS_LOG = "/home/observer/logs/startobs.log"
 #set SCHEDULER_PROGRAM = "/home/observer/scheduler/bin/scheduler"
-set VERBOSE_FLAG = 1
+#set VERBOSE_FLAG = 0
 set HOUR_LIMIT = 24
 #
 if ( ! -e $QUESTNEATDATADIR ) then

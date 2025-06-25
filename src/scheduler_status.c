@@ -26,12 +26,56 @@ int init_status_names()
 
 /*****************************************************/
 /* parse  reply string to find status keyword and status value. If found, copy  
- * value to value_string and return length of value string.
- * If not found, return 0
+  value to value_string and return length of value string.
+  If not found, return 0
+  
+  expected string format begings  "[", followed by "ERROR" or "DONE",
+  followed by keyword/value pairs, where each pair is expressed
+
+    'keyword': value
+
+  where value is either True, False, or a string bracketed by "'",
+  and separator "," appears between keyword/value expression.
+
+  The last keyword/value expression is followed by "]".
+
+  For example:
+
+   [DONE 
+    {'ready': True,
+   'state': 'started',
+   'error': False,
+   'comment': 'started',
+   'date': '2025-06-24T20:15:56.00',
+   'NOSTATUS': '0000',
+   'UNKNOWN': '0000',
+   'IDLE': '1111',
+   'EXPOSING': '0000',
+   'READOUT_PENDING': '0000',
+   'READING': '0000',
+   'FETCHING': '0000',
+   'FLUSHING': '0000',
+   'ERASING': '0000',
+   'PURGING': '0000',
+   'AUTOCLEAR': '0000',
+   'AUTOFLUSH': '0000',
+   'POWERON': '1111',
+   'POWEROFF': '0000',
+   'POWERBAD': '0000',
+   'FETCH_PENDING': '0000',
+   'ERROR': '0000',
+   'ACTIVE': '0000',
+   'ERRORED': '0000', 
+   'cmd_error':False, 
+   'cmd_error_msg':'False', 
+   'cmd_command':'', 
+   'cmd_arg_value_list':'', 
+   'cmd_reply':''
+   ]
 */
 int get_value_string(char *reply, char *keyword, char *separator, char *value_string)
 {
-  char *strptr1, *strptr2;
+  char *strptr1, *strptr2,temp_string[1024];
   int n;
 
   strptr1 = NULL;
@@ -39,16 +83,61 @@ int get_value_string(char *reply, char *keyword, char *separator, char *value_st
   n = 0;
   *value_string = 0;
 
+  //set strptr1 to point to the beginning of the specified keyword
+
   strptr1 = strstr(reply, keyword);
   if (strptr1 != NULL){
+     // if found, advance strptr1 to the location of ":"  immediately following
+     // the keyword
      strptr1 = strstr(strptr1,":");
-     if (strptr1 != NULL) strptr2 = strstr(strptr1, "|");
+
+     // if strptr1 is found, set strptr2 to the location of separator (i.e. ",")
+     // immediately following ":"
+     if (strptr1 != NULL)
+	  strptr2 = strstr(strptr1, separator);
+
+	
+     // increment strptr1 to point to the first character following ":"
+     strptr1 += 1;
+
+     // decrement strptr2 to point the first character preceeding ","
+     strptr2 -= 1;
+
   }
+
+  // if both strptr1 and strptr2 are not NULL, assume the value string
+  // is bracketed by these two pointers. If the value is a string also bracketed by
+  // "'", then strip these characters from value string.
+  //
   if (strptr1 != NULL && strptr2 != NULL){
-      strptr1 += 1;
-      n=strptr2-strptr1;
+
+      n=strptr2-strptr1+1;
       strncpy(value_string,strptr1,n);
       *(value_string + n) = 0;
+
+      // copy value string into temp string and check temp string
+      // for "'" at beginning and end
+      strptr1 = NULL;
+      strptr2 = NULL;
+      strcpy(temp_string,value_string);
+      strptr1 = strstr(temp_string,"'");
+
+
+      if (strptr1 != NULL ){
+	  strptr1 += 1;
+	  strptr2 = strstr(strptr1,"'");
+	  if (strptr2 != NULL)
+	     strptr2 -= 1;
+      }
+      
+      // if "'" found at beginning and end of temp_string, copy the
+      // characters bracketed by "'" into value string.
+      if (strptr1 != NULL &&  strptr2 != NULL){
+        n=strptr2-strptr1+1;
+        strncpy(value_string,strptr1,n);
+        *(value_string + n) = 0;
+      }
+
   }
   else{
       fprintf(stderr,"ERROR: can not find keyword [%s] in status string [%s]\n",
@@ -100,6 +189,21 @@ int binary_string_to_int(char *binaryString)
     return result;
 }
 
+
+/*****************************************************/
+/* convert integer to string binary representation of the integer*/
+char *int_to_binary_string(int n, char *string)
+{
+    char s[1];
+    for (int i = 4; i > 0; i--) {
+      sprintf(s,"%1d", (n & 1));
+      strncpy(string+4-i,s,1);
+      n >> 1;
+    }
+    *(string+4)=0;
+    return string;
+}
+
 /*****************************************************/
 /* find keyword in reply string and interpret value as  boolean */
 
@@ -108,7 +212,7 @@ bool get_bool_status(char *keyword, char *reply)
   char string[1024];
   int n;
 
-  n = get_value_string(reply,keyword,"|",string);
+  n = get_value_string(reply,keyword,",",string);
   if (n>0) 
      return string_to_bool(string);
   else
@@ -125,7 +229,7 @@ int  get_string_status(char *keyword, char *reply, char *status)
   int n;
 
   strcpy(status,"UNKNOWN");
-  n = get_value_string(reply,keyword,"|",string);
+  n = get_value_string(reply,keyword,",",string);
   if (n>0) strcpy(status,string);
 
   return(n);
@@ -140,6 +244,7 @@ int  get_string_status(char *keyword, char *reply, char *status)
 int parse_status(char *reply,Camera_Status *status)
 {
   int i;
+  char temp_string[1024];
 
   status->ready= get_bool_status("ready",reply);
   status->error= get_bool_status("error",reply);
@@ -150,7 +255,8 @@ int parse_status(char *reply,Camera_Status *status)
 
   for (i=0;i<NUM_STATES;i++){
      status->state_val[i]=-1;
-     status->state_val[i]=binary_string_to_int(state_name[i]);
+     get_string_status(state_name[i],reply,temp_string);
+     status->state_val[i]=binary_string_to_int(temp_string);
   }
 
   return (0);
@@ -176,8 +282,12 @@ int print_camera_status(Camera_Status *status,FILE *output)
       fprintf(output,"error        : %s\n","False");
 
    int i;
+   char s[32];
+   for (i=0;i<32;i++){s[i]=0;}
+
    for (i=0;i<NUM_STATES;i++){
-      fprintf(output,"%s        : %d\n",state_name[i],status->state_val[i]);
+      int_to_binary_string(status->state_val[i],s);
+      fprintf(output,"%s        : %s\n",state_name[i],s);
    }
 
    return(0);

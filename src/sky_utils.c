@@ -1046,6 +1046,7 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 		*elevsea = 2347.;
 		*elev = 2347.; /* for ocean horizon, not Andes! */
 		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
+		fflush(stdout);
 	}
 	else if (obs_code[0] == 'b') {
 		strcpy(site_name, "Black Moshannon Observatory");
@@ -4343,7 +4344,7 @@ void print_tonight(struct date_time date, double lat, double longit,
 		/* initial guess */
 	jdsunset = jd_sun_alt(-(0.83+horiz),jdsunset,lat,longit);
 	if(jdsunset > 0.) {
-		printf(stdout,"jdsunset = %12/6f\n",jdsunset);
+		fprintf(stdout,"jdsunset = %12.6f\n",jdsunset);
 		oprntf("#Sunset (%5.0f m horizon): ",elev);
 		print_time((jdsunset-zone(use_dst,stdz,jdsunset,*jdb,*jde)/24.),0);
 		print_tz(jdsunset,use_dst,*jdb,*jde,zabr);

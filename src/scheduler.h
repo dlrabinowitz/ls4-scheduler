@@ -250,6 +250,7 @@ typedef struct {
     char date[1024];
     double read_time;
     int state_val[NUM_STATES];
+
 } Camera_Status;
 
 #define MAX_FITS_WORDS 100
@@ -453,6 +454,7 @@ double expose_timeout (char *exp_mode, double exp_time, bool wait_flag);
 
 int init_status_name();
 int binary_string_to_int(char *binaryString) ;
+char *int_to_binary_string(int n, char *string);
 int get_value_string(char *reply, char *keyword, char *separator, char *value_string);
 int get_string_status(char *keyword, char *reply, char *status);
 int parse_status(char *reply,Camera_Status *status);
