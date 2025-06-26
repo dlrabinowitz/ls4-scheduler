@@ -192,16 +192,16 @@ int binary_string_to_int(char *binaryString)
 
 /*****************************************************/
 /* convert integer to string binary representation of the integer*/
-char *int_to_binary_string(int n, char *string)
+int int_to_binary_string(int n, char *string)
 {
-    char s[1];
+    char s[2];
     for (int i = 4; i > 0; i--) {
       sprintf(s,"%1d", (n & 1));
       strncpy(string+4-i,s,1);
       n >> 1;
     }
     *(string+4)=0;
-    return string;
+    return (0);
 }
 
 /*****************************************************/
@@ -267,19 +267,11 @@ int parse_status(char *reply,Camera_Status *status)
 /* print the values in the specified Camera_Status record */
 int print_camera_status(Camera_Status *status,FILE *output)
 {
-   fprintf(output,"date         : %s\n",status->date);  
-   fprintf(output,"state        : %s\n",status->state);  
-   fprintf(output,"comment      : %s\n",status->comment);  
-
-   if (status->ready)
-      fprintf(output,"ready        : %s\n","True");
-   else
-      fprintf(output,"ready        : %s\n","False");
-
-   if (status->error)
-      fprintf(output,"error        : %s\n","True");
-   else
-      fprintf(output,"error        : %s\n","False");
+   fprintf(output,"%20s  : %s\n","UT date",status->date);  
+   fprintf(output,"%20s  : %s\n","state ",status->state); 
+   fprintf(output,"%20s  : %s\n","comment",status->comment); 
+   fprintf(output,"%20s  : %s\n","ready",status->ready ? "True" : "False");
+   fprintf(output,"%20s  : %s\n","error",status->error ? "True" : "False");
 
    int i;
    char s[32];
@@ -287,7 +279,7 @@ int print_camera_status(Camera_Status *status,FILE *output)
 
    for (i=0;i<NUM_STATES;i++){
       int_to_binary_string(status->state_val[i],s);
-      fprintf(output,"%s        : %s\n",state_name[i],s);
+      fprintf(output,"%20s  : %s\n",state_name[i],s);  
    }
 
    return(0);

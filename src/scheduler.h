@@ -130,6 +130,12 @@
                                     focus */
 
 
+
+// define accepted filter names and enumerate an index for each filter name
+#define FILTER_NAME (const char*[]) { "rgzz", "none", "fake", "clear", NULL }
+enum Filter_Index { RGIZ_INDEX, NONE_INDEX, FAKE_INDEX, CLEAR_INDEX, NUM_FILTERS };
+
+
 typedef struct {
     int status; /* 0 if not doable, 2 if must observe pronto, 1 if ready to observe,
                    -1 if not enough time to observe remaining fields */
@@ -410,6 +416,7 @@ int advance_tm_day(struct tm *tm);
 
 int leap_year_check(int year);
 
+int check_filter_name(char *name);
 
 /* from scheduler_telescope.c */
 int init_telescope_offsets(Telescope_Status *status);
@@ -454,7 +461,7 @@ double expose_timeout (char *exp_mode, double exp_time, bool wait_flag);
 
 int init_status_name();
 int binary_string_to_int(char *binaryString) ;
-char *int_to_binary_string(int n, char *string);
+int int_to_binary_string(int n, char *string);
 int get_value_string(char *reply, char *keyword, char *separator, char *value_string);
 int get_string_status(char *keyword, char *reply, char *status);
 int parse_status(char *reply,Camera_Status *status);

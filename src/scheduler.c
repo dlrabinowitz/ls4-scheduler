@@ -55,6 +55,7 @@
 */
 
 #include "scheduler.h"
+#include <unistd.h>
 
 // do not wait for readout of exposure before moving to next field.
 
@@ -75,8 +76,8 @@ double focus_increment=NOMINAL_FOCUS_INCREMENT;
 double focus_default=NOMINAL_FOCUS_DEFAULT;
 FILE *hist_out,*sequence_out,*log_obs_out,*obs_record;
 double ut_prev=0;
-char *filter_name_ptr;
 char filter_name[1024];
+char *filter_name_ptr=0;
 
 /************************************************************/
       
@@ -363,6 +364,7 @@ int main(int argc, char **argv)
 #endif
         ut_prev=-1000.0;
 
+	fprintf(stderr, "LS4 Camera Status:\n");
         print_camera_status(&cam_status,stderr);
 
         /* initialize telescope pointing offsets */
@@ -472,9 +474,13 @@ int main(int argc, char **argv)
 #endif
 
 	     /* update sequence with latest additions from new_script_name */
+	     num_new_fields = 0;
 #if FAKE_RUN
 
-             if( jd>nt.jd_start + 0.1){
+             if(access(new_script_name,F_OK) {
+	       num_new_fields = 0;
+	     }
+	     else if( jd>nt.jd_start + 0.1){
                if(verbose){
                  fprintf(stderr,"# UT %9.5f : checking for new observations to add to sequence\n",ut);
 	       }
@@ -490,10 +496,17 @@ int main(int argc, char **argv)
                fprintf(stderr,"# UT %9.5f : checking for new observations to add to sequence\n",ut);
 	     }
 
-             num_new_fields=load_sequence(new_script_name,new_sequence);
+	     // if file of new observations does not exist, just set num_new_fields to 0
+             if(access(new_script_name,F_OK)!=0) {
+	       num_new_fields = 0;
+             }
+	     // otherwise load any new fields
+	     else{
+               num_new_fields=load_sequence(new_script_name,new_sequence);
+	     }
 #endif
 
-             if (num_new_fields<1){
+             if (num_new_fields<0){
                fprintf(stderr,"Error loading new observations from script %s\n",new_script_name);
              }
              else{
@@ -1873,7 +1886,7 @@ fprintf(stderr,"HA = %7.3f,  expt = %7.3f,  LONG_EXPTIME = %7.3f\n",
     if(update_fits_header(fits_header,FILTERNAME_KEYWORD,
 		tel_status->filter_string)<0)return(-1);
 
-    if(strstr(tel_status->filter_string,"RG610")!=NULL||
+    if(strstr(tel_status->filter_string,"rgzz")!=NULL||
 		strstr(tel_status->filter_string,"FAKE")!=NULL){
          if(update_fits_header(fits_header,FILTERID_KEYWORD,"4")<0) return(-1);
     }
@@ -3331,7 +3344,6 @@ double get_ha(double ra, double lst) {
   return(ha);
 }
 
-
 /************************************************************/
 
 int load_sequence(char *script_name, Field *sequence)
@@ -3342,6 +3354,10 @@ int load_sequence(char *script_name, Field *sequence)
     char string[1024],*s_ptr,shutter_flag[3],s[256];
     Field *f;
 
+    /* if file can not be opened for reading, return error. Otherwise
+     * load any new sequences
+    */
+
     input=fopen(script_name,"r");
     if (input==NULL){
        fprintf(stderr,"load_sequence: can't open file %s\n",script_name);
@@ -3350,7 +3366,6 @@ int load_sequence(char *script_name, Field *sequence)
 
     n_fields=0;
     line=0;
-    /*filter_name_ptr=0;*/
     while(fgets(string,1024,input)!=NULL){
       line++;
       /* get rid of leading blanks */
@@ -3363,6 +3378,9 @@ int load_sequence(char *script_name, Field *sequence)
        if(*s_ptr!=0 && (strncmp(s_ptr,"FILTER",6) == 0 || strncmp(s_ptr,"filter",6)==0) ){
          sscanf(s_ptr,"%s %s",s,filter_name);
          filter_name_ptr=filter_name;
+	 if(check_filter_name(filter_name)!=0){
+	   fprintf(stderr,"WARNING: unexpeced filter name: %s",filter_name);
+	 }
        }
        else if(*s_ptr!=0 && strncmp(s_ptr,"#",1)!=0){
 
@@ -3432,6 +3450,19 @@ int load_sequence(char *script_name, Field *sequence)
 
     return(n_fields);
 
+}
+/************************************************************/
+
+/* if name is an expected filter name (see  FILTER_NAME in scheduler.h)
+ * return 0. Otherwise return -1
+*/
+
+int check_filter_name(char *name)
+{
+    for (enum Filter_Index i =1; i<= NUM_FILTERS; i++){
+      if(strcmp(name, FILTER_NAME[i-1]) == 0) return(0);
+    }
+    return(-1);
 }
 /************************************************************/
 
