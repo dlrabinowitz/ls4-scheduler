@@ -62,7 +62,7 @@
 #define WAIT_FLAG False
 //#define DEBUG 1
 
-#define LOOP_WAIT_SEC 60 /* seconds to wait between loops if no
+#define LOOP_WAIT_SEC 10 /* seconds to wait between loops if no
                            field selected */
 int verbose=0;
 int verbose1 = 0; /* set to 1 for very verbose */
@@ -76,7 +76,7 @@ double focus_increment=NOMINAL_FOCUS_INCREMENT;
 double focus_default=NOMINAL_FOCUS_DEFAULT;
 FILE *hist_out,*sequence_out,*log_obs_out,*obs_record;
 double ut_prev=0;
-char filter_name[1024];
+char filter_name[STR_BUF_LEN];
 char *filter_name_ptr=0;
 
 /************************************************************/
@@ -86,13 +86,13 @@ int main(int argc, char **argv)
 	int done = 0;
 	struct tm tm;
         double jd,ut;
-	char string[1024];
+	char string[STR_BUF_LEN];
         struct date_time date,date_5day,date_10day,date_15day;
 	Night_Times nt; /* times of sunrise/set, moonrise/set, etc */
         Night_Times nt_5day; /* nt for 5 days later */
         Night_Times nt_10day; /* nt for 10 days later */
         Night_Times nt_15day; /* nt for 15 days later */
-        char script_name[1024], new_script_name[1024];
+        char script_name[STR_BUF_LEN], new_script_name[STR_BUF_LEN];
 	Field sequence[MAX_FIELDS],new_sequence[MAX_FIELDS];
         int i,num_fields,num_observable_fields,num_completed_fields;
 	int num_new_fields, num_new_observable_fields, num_new_fields_prev;
@@ -142,6 +142,7 @@ int main(int argc, char **argv)
         sscanf(argv[3],"%d",&(date.mo));
         sscanf(argv[4],"%d",&(date.d));
         sscanf(argv[5],"%d",&verbose);
+	if (verbose > 1)verbose1=1;
 	sprintf(new_script_name,"%s.add",script_name);
 	fprintf(stderr,"new script name is %s\n",new_script_name);
 	fflush(stderr);
@@ -280,6 +281,8 @@ int main(int argc, char **argv)
            fprintf(stderr,"# ut sunrise: %7.3f\n",nt.ut_sunrise); 
            fprintf(stderr,"# jd start  : %7.3f\n",nt.jd_start-2450000); 
            fprintf(stderr,"# jd end    : %7.3f\n",nt.jd_end-2450000); 
+           fprintf(stderr,"# lst start : %7.3f\n",nt.lst_start); 
+           fprintf(stderr,"# lst end   : %7.3f\n",nt.lst_end); 
            fprintf(stderr,"# moon ra   : %7.3f\n",nt.ra_moon); 
            fprintf(stderr,"# moon dec  : %7.3f\n",nt.dec_moon); 
            fprintf(stderr,"# moon frac : %7.3f\n",nt.percent_moon); 
@@ -1152,7 +1155,7 @@ int do_exit(int code)
 int save_obs_record(Field *sequence, FILE *obs_record, int num_fields,
          struct tm *tm)
 {
-     char string[1024];
+     char string[STR_BUF_LEN];
 
      /* rewind obs_record so that next write will be at start of file
         (overwriting previous records) */
@@ -1197,7 +1200,7 @@ int load_obs_record(char *file_name, Field *sequence, FILE **obs_record)
      int n_fresh;
      int year,month,day,hour,minute,second;
      Field *f;
-     char string[1024];
+     char string[STR_BUF_LEN];
 
      *obs_record=fopen(file_name,"r+");
      if(*obs_record==NULL){
@@ -1220,7 +1223,7 @@ int load_obs_record(char *file_name, Field *sequence, FILE **obs_record)
      n_started=0;
      n_completed=0;
 
-     if(fgets(string,1024,*obs_record)==NULL){
+     if(fgets(string,STR_BUF_LEN,*obs_record)==NULL){
          fprintf(stderr,"load_obs_record: can't get first line \n");
          fprintf(stderr,"load_obs_record: assuming no previous observations\n");
          return(0);
@@ -1290,7 +1293,7 @@ int load_obs_record(char *file_name, Field *sequence, FILE **obs_record)
 
 int check_weather (FILE *input, double jd, struct date_time *date, Night_Times *nt)
 {
-     char string[1024],s[256];
+     char string[STR_BUF_LEN],s[256];
      double t_obs,t_on,duration,ut;
      int year, mon, day, doy;
 
@@ -1316,7 +1319,7 @@ int check_weather (FILE *input, double jd, struct date_time *date, Night_Times *
 
      rewind(input);
 
-     while(t_obs>t_on+duration&&fgets(string,1024,input)!=NULL){
+     while(t_obs>t_on+duration&&fgets(string,STR_BUF_LEN,input)!=NULL){
        /*if(verbose)fprintf(stderr,"%s",string);*/
        sscanf(string,"%s %s %s %lf %s %lf",s,s,s,&t_on,s,&duration);
        duration=duration/24.0;
@@ -1446,7 +1449,7 @@ int observe_next_field(Field *sequence, int index, int index_prev,
     double ra_rate,dec_rate; /* ra and dec tracking rate corrections in arcsec/hour */
     struct timeval t0,t1,t2;
     struct tm tm;
-    char string[1024],shutter_string[3],filename[1024],field_description[1024];
+    char string[STR_BUF_LEN],shutter_string[3],filename[STR_BUF_LEN],field_description[STR_BUF_LEN];
     Field *f,*f_prev;
     double focus;
     double ra_dither,dec_dither;
@@ -2282,7 +2285,7 @@ int get_next_field(Field *sequence,int num_fields, int i_prev,
      int i_min,i_max,status,n_ready,n_late;
      int n_do_now,i_min_dark, i_min_flat,i_min_do_now;
      int n_ready_must_do,n_late_must_do;
-    
+     char field_status[256];
 
      if(i_prev>=0&&i_prev<num_fields-1){
        f_prev=sequence+i_prev;
@@ -2308,7 +2311,39 @@ int get_next_field(Field *sequence,int num_fields, int i_prev,
          f=sequence+i;
 
          update_field_status(f,jd,bad_weather);
+	 if(verbose1){
+	   get_field_status_string(f,field_status);
+	   fprintf(stderr,"field %d statue %s\n",i,field_status);
+	 }
 
+#if 1
+         /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
+            value of n_left */
+
+         if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
+            n_ready_must_do++;
+
+            n_left=f->n_required-f->n_done;
+            
+            if(n_left<n_left_min_must_do){
+                 n_left_min_must_do=n_left;
+            }
+
+         }
+
+         /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
+            field).  Return field index */
+
+	 else if(f->status==DO_NOW_STATUS){
+            n_do_now++;
+            if(i_min_do_now==-1)i_min_do_now=i;
+            if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
+            if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
+                  f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
+            /*return(i);*/
+         }
+
+#else
          /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
             field).  Return field index */
 
@@ -2334,6 +2369,7 @@ int get_next_field(Field *sequence,int num_fields, int i_prev,
             }
 
          }
+#endif
 
          /* for any other field with READY_STATUS, increment the count and update minimum
             value of n_left */
@@ -2645,6 +2681,29 @@ int shorten_interval(Field *f)
 
 */
 
+int  get_field_status_string(Field *f, char *string)
+{
+    switch (f->status){
+
+        case TOO_LATE_STATUS -1:
+	  sprintf(string,"Too late");
+	  break;
+        case NOT_DOABLE_STATUS -1:
+	  sprintf(string,"Not doable");
+	  break;
+        case READY_STATUS -1:
+	  sprintf(string,"Ready");
+	  break;
+        case DO_NOW_STATUS -1:
+	  sprintf(string,"Do now");
+	  break;
+	default:
+	  sprintf(string,"Unknown status");
+	  break;
+    }
+
+    return (0);
+}
 
 int update_field_status(Field *f, double jd, int bad_weather)
 {
@@ -2796,6 +2855,7 @@ int init_fields(Field *sequence, int num_fields,
                     "adjusting jd_start from %7.3f to %7.3f\n",
                     nt->jd_start-2450000,jd-2450000);
         }
+        nt->lst_start=nt->lst_start+(jd-nt->jd_start)*SIDEREAL_DAY_IN_HOURS;
         nt->jd_start=jd;
     }
 
@@ -2810,6 +2870,8 @@ int init_fields(Field *sequence, int num_fields,
          fprintf(stderr,"current jd: %7.3f\n",jd-2450000);
          fprintf(stderr,"jd_start: %7.3f\n",nt->jd_start-2450000);
          fprintf(stderr,"jd_end: %7.3f\n",nt->jd_end-2450000);
+         fprintf(stderr,"lst_start: %7.3f\n",nt->lst_start);
+         fprintf(stderr,"lst_end: %7.3f\n",nt->lst_end);
          fprintf(stderr,"dark night duration : %7.3f\n",dark_night_duration);
          fprintf(stderr,"whole night duration : %7.3f\n",whole_night_duration);
     }
@@ -2829,6 +2891,10 @@ int init_fields(Field *sequence, int num_fields,
         }
 
 
+	if(verbose1){
+	   fprintf(stderr,"checking field %d at ra %12.6f dec %12.6f\n",
+			 i,f->ra,f->dec);
+	}
         /* get rise and set times of given position (the jd when the
            airmass crosses below and above the maximum airmass, MAX_AIRMASS). 
            If the object is already up at the start of the observing window
@@ -3213,7 +3279,7 @@ f->ra,f->dec,nt->ra_moon,nt->dec_moon, dra,ddec,dmoon);
 double get_jd_rise_time(double ra,double dec, double max_am, double max_ha,
        Night_Times *nt, Site_Params *site, double *am, double *ha)
 {
-    double lst,jd;
+    double lst,jd,current_jd,dt;
 
     /* get lst, hour angle, jd, and airmass at start time of observing window.
        If am is less than max_am and absolute value of ha is less than max_am, 
@@ -3225,27 +3291,59 @@ double get_jd_rise_time(double ra,double dec, double max_am, double max_ha,
 
     lst=nt->lst_start;
     jd=nt->jd_start;
+
+    current_jd = get_jd();
+
+
     *ha=get_ha(ra,lst);
     *am=get_airmass(*ha,dec,site);
 
-    if (*am < max_am && fabs (*ha) < max_ha ) return (jd);
+    if(verbose1){
+       fprintf(stderr,"jd_start: %12.6f  lst_start: %7.3f\n",jd,lst);
+       fprintf(stderr,"ra: %12.6f  dec: %12.6f\n",ra,dec);
+       fprintf(stderr,"ha: %7.3f   am: %7.3f\n",*ha,*am);
+    }
 
+    if (*am < max_am && fabs (*ha) < max_ha ) {
+       if(verbose1){
+          fprintf(stderr,"init am and ha within limits. returning with jd = %12.6f\n",jd);
+       }
+       return (jd);
+    }
      
+    if(verbose1){
+       fprintf(stderr,"init_fields: searching for jd at rise time\n");
+    }
+
+	  
     while(jd<nt->jd_end&&(*am>max_am||fabs(*ha)>max_ha)){
           jd=jd+(LST_SEARCH_INCREMENT/SIDEREAL_DAY_IN_HOURS);
           lst=lst+LST_SEARCH_INCREMENT;
           if(lst>24.0)lst=lst-24.0;
           *ha=get_ha(ra,lst);
           *am=get_airmass(*ha,dec,site);
+	  if(verbose1){
+            fprintf(stderr,"jd: %12.6f lst: %7.3f am: %7.3f ha: %7.3f\n",jd,lst,*am,*ha);
+	  }
     }
 
     if(*am>max_am){
+       if(verbose1){
+	  fprintf(stderr,"field never rises below am %7.3f\n",max_am);
+       }
        return(-1.0);
     }
     else if(fabs(*ha)>max_ha){
+       if(verbose1){
+	  fprintf(stderr,"field ha is always greater than  %7.3f\n",max_ha);
+       }
        return(-1.0);
     }
     else{
+       if(verbose1){
+	  dt = (jd-current_jd)*24.0;
+	  fprintf(stderr,"field rises at jd  %7.3f (in %7.3f h)\n",jd,dt);
+       }
        return(jd);
     }
      
@@ -3351,7 +3449,8 @@ int load_sequence(char *script_name, Field *sequence)
 
     FILE *input;
     int n,n_fields,line,n1;
-    char string[1024],*s_ptr,shutter_flag[3],s[256];
+    char string[STR_BUF_LEN+1],*s_ptr,shutter_flag[3],s[256];
+    int str_len=0;
     Field *f;
 
     /* if file can not be opened for reading, return error. Otherwise
@@ -3366,86 +3465,120 @@ int load_sequence(char *script_name, Field *sequence)
 
     n_fields=0;
     line=0;
-    while(fgets(string,1024,input)!=NULL){
+    string[STR_BUF_LEN-1]=0;
+    while(fgets(string,STR_BUF_LEN,input)!=NULL){
+
       line++;
-      /* get rid of leading blanks */
-      s_ptr=string;
-      while(strncmp(s_ptr," ",1)==0&&*s_ptr!=0)s_ptr++;
+      // make sure last element if string is still 0. If not, the line read from the input is
+      // longer than buffer length (STR_BUF_LEN)
+      if(string[STR_BUF_LEN-1]!=0){
+          fprintf(stderr,"load_sequence: WARNING: sequence line [%d] is too long. Ignoring \n",line);
+	  fflush(stderr);
+	  string[STR_BUF_LEN-1]=0;
+      }
+      else{
 
-      /* if there are more characters left in the string, and if the
-         current character is not "#", then read in the next line */
+	/* get rid of leading spaces */
+	s_ptr=string;
+	while(strncmp(s_ptr," ",1)==0&&*s_ptr!=0)s_ptr++;
 
-       if(*s_ptr!=0 && (strncmp(s_ptr,"FILTER",6) == 0 || strncmp(s_ptr,"filter",6)==0) ){
-         sscanf(s_ptr,"%s %s",s,filter_name);
-         filter_name_ptr=filter_name;
-	 if(check_filter_name(filter_name)!=0){
-	   fprintf(stderr,"WARNING: unexpeced filter name: %s",filter_name);
+	/* get length of string, starting at s_ptr */
+	str_len = strlen(s_ptr);
+
+	/* add a space to the end of s_ptr to make sure it is processed
+	 * correctly by camera server
+	*/
+
+	sprintf(s_ptr+str_len," ");
+	str_len++;
+
+	/* if there are more characters left in the string, and if the
+	   current character is not "#", then read in the next line */
+
+	 if (strlen<=1){
+           /* line too short, pass */
+	   if(verbose){
+	     printf(stderr,"WARNING: line [%d] is too short [%s]\n",line,s_ptr);
+	   }
+         }
+	 else if (strncmp(s_ptr,"#",1)==0){
+	   /* comment line. pass */
+	   if(verbose){
+	     printf(stderr,"line [%d] is a commented out [%s]\n",line,s_ptr);
+           }
 	 }
-       }
-       else if(*s_ptr!=0 && strncmp(s_ptr,"#",1)!=0){
+	 else if(strncmp(s_ptr,"FILTER",6) == 0 || strncmp(s_ptr,"filter",6)==0 ){
+	   sscanf(s_ptr,"%s %s",s,filter_name);
+	   filter_name_ptr=filter_name;
+	   if(check_filter_name(filter_name)!=0){
+	     fprintf(stderr,"WARNING: unexpeced filter name: %s",filter_name);
+	   }
+	 }
+	 else{
 
-          f=sequence+n_fields;
-	  f->field_number=n_fields;
-          f->line_number=line;
-          strcpy(f->script_line,string);
+	    f=sequence+n_fields;
+	    f->field_number=n_fields;
+	    f->line_number=line;
+	    strcpy(f->script_line,string);
 
-          n=sscanf(s_ptr,"%lf %lf %s %lf %lf %d %d",
-	    &(f->ra),&(f->dec),shutter_flag,&(f->expt),&(f->interval),
-	    &(f->n_required),&(f->survey_code));
+	    n=sscanf(s_ptr,"%lf %lf %s %lf %lf %d %d",
+	      &(f->ra),&(f->dec),shutter_flag,&(f->expt),&(f->interval),
+	      &(f->n_required),&(f->survey_code));
 
-          if (f->survey_code == LIGO_SURVEY_CODE)f->survey_code = MUSTDO_SURVEY_CODE;
-          f->interval=f->interval/3600.0;
-          f->expt=f->expt/3600.0;
+	    if (f->survey_code == LIGO_SURVEY_CODE)f->survey_code = MUSTDO_SURVEY_CODE;
+	    f->interval=f->interval/3600.0;
+	    f->expt=f->expt/3600.0;
 
-          f->shutter=get_shutter_code(shutter_flag);
+	    f->shutter=get_shutter_code(shutter_flag);
 
-          /* if this is a focus field, read the focus start, increment, and
-             default setting from the script line */
+	    /* if this is a focus field, read the focus start, increment, and
+	       default setting from the script line */
 
-          if(f->shutter==FOCUS_CODE){
-             sscanf(s_ptr,"%s %s %s %s %s %s %s %lf %lf",
-		s,s,s,s,s,s,s,&focus_increment,&focus_default);
-             n1 = f->n_required/2;
-             focus_start=focus_default-n1*focus_increment;
-             if(verbose){
-                fprintf(stderr,
-			"load_sequence: focus start, incr, default: %8.5f %8.5f %8.5f\n",
-			focus_start,focus_increment,focus_default);
-               fflush(stderr);
-             }
-	        
-          }
+	    if(f->shutter==FOCUS_CODE){
+	       sscanf(s_ptr,"%s %s %s %s %s %s %s %lf %lf",
+		  s,s,s,s,s,s,s,&focus_increment,&focus_default);
+	       n1 = f->n_required/2;
+	       focus_start=focus_default-n1*focus_increment;
+	       if(verbose){
+		  fprintf(stderr,
+			  "load_sequence: focus start, incr, default: %8.5f %8.5f %8.5f\n",
+			  focus_start,focus_increment,focus_default);
+		 fflush(stderr);
+	       }
+		  
+	    }
 
-          /* if the focus parameters are out of range for a focus field
-             skip the field */
+	    /* if the focus parameters are out of range for a focus field
+	       skip the field */
 
-	  if(f->shutter==FOCUS_CODE&&
-             (focus_start<MIN_FOCUS||focus_increment<MIN_FOCUS_INCREMENT||
-                focus_start>MAX_FOCUS||focus_increment>MAX_FOCUS_INCREMENT||
-                focus_start+(f->n_required*focus_increment)>MAX_FOCUS)){
-             fprintf(stderr,"focus parameters out of range: %s",s_ptr);
-          }
+	    if(f->shutter==FOCUS_CODE&&
+	       (focus_start<MIN_FOCUS||focus_increment<MIN_FOCUS_INCREMENT||
+		  focus_start>MAX_FOCUS||focus_increment>MAX_FOCUS_INCREMENT||
+		  focus_start+(f->n_required*focus_increment)>MAX_FOCUS)){
+	       fprintf(stderr,"focus parameters out of range: %s",s_ptr);
+	    }
 
-           /* Also make sure 6 parameters are read from the line, and that
-             the parameters are within range. If not, skip this field. */
+	     /* Also make sure 6 parameters are read from the line, and that
+	       the parameters are within range. If not, skip this field. */
 
-          else if(n!=7||f->ra<0.0||f->ra>24.0||f->dec<-90.0||f->dec>90.0||
-                f->expt>MAX_EXPT||f->expt<0||
-                f->interval>MAX_INTERVAL||f->interval<MIN_INTERVAL||f->n_required<1||
-                f->n_required>MAX_OBS_PER_FIELD||f->shutter==BAD_CODE||
-                f->survey_code<MIN_SURVEY_CODE||f->survey_code>MAX_SURVEY_CODE){
-             fprintf(stderr,"load_sequence: bad field line %d: %s\n",
-                line,string);
-          }
+	    else if(n!=7||f->ra<0.0||f->ra>24.0||f->dec<-90.0||f->dec>90.0||
+		  f->expt>MAX_EXPT||f->expt<0||
+		  f->interval>MAX_INTERVAL||f->interval<MIN_INTERVAL||f->n_required<1||
+		  f->n_required>MAX_OBS_PER_FIELD||f->shutter==BAD_CODE||
+		  f->survey_code<MIN_SURVEY_CODE||f->survey_code>MAX_SURVEY_CODE){
+	       fprintf(stderr,"load_sequence: bad field line %d: %s\n",
+		  line,string);
+	    }
 
-          /* Accept the field */
+	    /* Accept the field */
 
-          else{
-             n_fields++;
-          }
-       }
-    }
-         
+	    else{
+	       n_fields++;
+	    }
+	 } //if (strlen<=1){
+      } //if(string[STR_BUF_LEN-1]!=0{
+    } //while(fgets(string,STR_BUF_LEN,input)!=NULL){
+
     fclose(input);
 
     return(n_fields);
@@ -3520,7 +3653,7 @@ int print_history(double jd, Field *sequence, int num_fields,FILE *output)
 {
     int i;
     Field *f;
-    char string[1024];
+    char string[STR_BUF_LEN];
    
     sprintf(string,"%12.6f ",jd-2450000);
     for(i=0;i<num_fields;i++){

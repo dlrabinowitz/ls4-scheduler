@@ -137,9 +137,9 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    bool wait_flag, int *exp_error_code, char *exp_mode)
 {
     char command[MAXBUFSIZE],reply[MAXBUFSIZE];
-    char filename[1024],date_string[1024],shutter_string[256],field_description[1024];
-    char comment_line[1024];
-    char s[256],code_string[1024],ujd_string[256],string[1024];
+    char filename[STR_BUF_LEN],date_string[STR_BUF_LEN],shutter_string[256],field_description[STR_BUF_LEN];
+    char comment_line[STR_BUF_LEN];
+    char s[256],code_string[STR_BUF_LEN],ujd_string[256],string[STR_BUF_LEN];
     struct tm tm;
     int e;
     double expt;
@@ -291,7 +291,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
         fprintf(stderr,"take_exposure: timeout will be %d sec\n",timeout);
     }
 
-    if (strlen(EXPOSE_COMMAND) + strlen(shutter_state) + 9 + strlen(filename) + strlen(exp_mode) < 1024){
+    if (strlen(EXPOSE_COMMAND) + strlen(shutter_state) + 9 + strlen(filename) + strlen(exp_mode) < STR_BUF_LEN){
         sprintf(command,"%s %s %9.3f %s %s",EXPOSE_COMMAND,shutter_state,expt,filename,exp_mode);
     }
     else{
@@ -468,7 +468,7 @@ int get_filename(char *filename,struct tm *tm,int shutter)
 {
     char shutter_string[3];
     int result;
-    char field_description[1024];
+    char field_description[STR_BUF_LEN];
 
     result=get_shutter_string(shutter_string,shutter,field_description);
     if(result!=0){
@@ -887,7 +887,7 @@ int wait_camera_readout(Camera_Status *status)
 int clear_camera()
 {
      char reply[MAXBUFSIZE];
-     char command_string[1024];
+     char command_string[STR_BUF_LEN];
 
      double timeout = CLEAR_TIME +  5;
      sprintf(command_string,"%s %d",CLEAR_COMMAND,CLEAR_TIME);

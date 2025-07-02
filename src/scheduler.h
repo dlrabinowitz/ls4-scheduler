@@ -52,7 +52,8 @@
 #define OBS_RECORD_FILE "scheduler.bin"  /* binary record of fields */
 
 #define DEGTORAD 57.29577951 /* 180/pi */
-#define LST_SEARCH_INCREMENT 0.0166 /* 1 minute in hours */
+//#define LST_SEARCH_INCREMENT 0.0166 /* 1 minute in hours */
+#define LST_SEARCH_INCREMENT 0.00166 /* 1 minute in hours */
 #define FAKE_RUN_TIME_STEP  0.0167 /* 1 minute in hours */
 
 #define MAX_AIRMASS 2.0
@@ -111,6 +112,7 @@
 #define FILENAME_LENGTH 16 /* length of prefix to FITS image file names 
                            (yyyymmddhhmmssx) */
 
+#define STR_BUF_LEN 1024 /* buffer size for various text strings */
 
 /* field status values */
 
@@ -142,7 +144,7 @@ typedef struct {
     int doable; /* 1 if all required observations possible, 0 if not */
     int field_number;
     int line_number;
-    char script_line[1024];    
+    char script_line[STR_BUF_LEN];    
     double ra; /* hours */
     double dec; /*deg */
     double gal_long; /*deg*/
@@ -251,9 +253,9 @@ typedef struct {
     bool ready;
     bool error;
     int error_code;
-    char state[1024];
-    char comment[1024];
-    char date[1024];
+    char state[STR_BUF_LEN];
+    char comment[STR_BUF_LEN];
+    char date[STR_BUF_LEN];
     double read_time;
     int state_val[NUM_STATES];
 
@@ -395,6 +397,8 @@ int get_next_field(Field *sequence,int num_fields, int i_prev, double jd,
 int paired_fields(Field *f1, Field *f2);
 
 int update_field_status(Field *sequence, double jd, int bad_weather);
+int  get_field_status_string(Field *f, char *string);
+
 
 int shorten_interval(Field *f);
 

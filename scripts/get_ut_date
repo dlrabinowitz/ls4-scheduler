@@ -52,6 +52,9 @@ if ( $FAKE_OBS || ( $local == 0 && $current_local_hour >= 8 ) ) then
      set dy = `date +"%Y"`
      set dm = `date +"%m"`
      set dd = `date +"%d"`
+     set dy = `printf "%d" $dy`
+     set dm = `printf "%d" $dm`
+     set dd = `printf "%d" $dd`
      @ dd = $dd + 1
 #    advance month and year by 1 as neccessary
      if ( $dd > 28 && $dm == 2  && $leap_year == 0 ) then

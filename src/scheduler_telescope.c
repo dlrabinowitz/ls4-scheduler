@@ -9,20 +9,19 @@
 #include "scheduler.h"
 
 
-#define COMMAND_BUFFER_SIZE 1024
 
 
 #define MACHINE_NAME "pco-nuc"
-#define COMMAND_PORT 3911  /*nightime */
-/*#define COMMAND_PORT 3912 daytime */
-#define DAYTIME_COMMAND_PORT 3912
+#define TEL_COMMAND_PORT 3911  /*nightime */
+/*#define TEL_COMMAND_PORT 3912 daytime */
+#define DAYTIME_TEL_COMMAND_PORT 3912
 
 
 #define COMMAND_WAIT_TIME 100000 /* useconds to wait between commands */
 
 /* first word in reply from telescope controller */
-#define ERROR_REPLY "error"
-#define DONE_REPLY "ok"
+#define TEL_ERROR_REPLY "error"
+#define TEL_DONE_REPLY "ok"
 
 
 /* Telescope Commands */
@@ -77,7 +76,7 @@ extern int stow_flag;
 
 int init_telescope_offsets(Telescope_Status *status)
 {
-        char string[1024];
+        char string[STR_BUF_LEN];
         double prev_ra_offset, prev_dec_offset, ra_offset, dec_offset;
         FILE *input;
 
@@ -100,7 +99,7 @@ int init_telescope_offsets(Telescope_Status *status)
 	    return(-1);
         }
 
-        if(fgets(string,1024,input)==NULL||
+        if(fgets(string,STR_BUF_LEN,input)==NULL||
                 sscanf(string,"%lf %lf",&prev_ra_offset,&prev_dec_offset)!=2){
 	    fclose(input);
             fprintf(stderr,"init_telescope_offsets: can't read previous offsets\n");
@@ -144,7 +143,7 @@ int init_telescope_offsets(Telescope_Status *status)
 
 int get_telescope_offsets(Field *f, Telescope_Status *status)
 {
-        char string[1024],command_string[1024];
+        char string[STR_BUF_LEN],command_string[STR_BUF_LEN];
         int i;
         double ra_offset, dec_offset;
         FILE *input;
@@ -206,7 +205,7 @@ int get_telescope_offsets(Field *f, Telescope_Status *status)
 	    return(-1);
         }
 
-        if(fgets(string,1024,input)==NULL||
+        if(fgets(string,STR_BUF_LEN,input)==NULL||
                 sscanf(string,"%lf %lf",&ra_offset,&dec_offset)!=2){
 	    fclose(input);
             fprintf(stderr,"get_telescope_offsets: can't read new offsets\n");
@@ -253,7 +252,7 @@ int get_telescope_offsets(Field *f, Telescope_Status *status)
 
 int focus_telescope(Field *f, Telescope_Status *status, double focus_default)
 {
-        char command_string[1024];
+        char command_string[STR_BUF_LEN];
         int i;
         double median,focus;
 
@@ -343,7 +342,7 @@ double get_median_focus(char *file)
     FILE *input;
     double focus[20],median,temp;
     int i,n,done;
-    char string[1024],s[256];
+    char string[STR_BUF_LEN],s[256];
 
     input=fopen(file,"r");
     if(input==NULL){
@@ -354,7 +353,7 @@ double get_median_focus(char *file)
     }
 
     n=0;
-    while(fgets(string,1024,input)!=NULL){
+    while(fgets(string,STR_BUF_LEN,input)!=NULL){
          if(strstr(string,"best focus:")!=NULL){
             sscanf(string,"%s %s %lf",s,s,focus+n);
 	    if(verbose){
@@ -556,7 +555,7 @@ int get_telescope_focus(double *focus)
        fflush(stderr);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
        sscanf(reply,"%s %lf",s,focus);
 #if 0
        fprintf(stderr,"get_telescope_focus: focus is %8.5f\n",*focus);
@@ -653,7 +652,7 @@ int update_telescope_status(Telescope_Status *status)
        fflush(stderr);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
        if(strstr(reply,"open")!=NULL){
          status->dome_status=1;
        }
@@ -668,7 +667,7 @@ int update_telescope_status(Telescope_Status *status)
        fflush(stderr);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
        sscanf(reply,"%s %lf",s,&(status->lst));
      }
 /* debug */
@@ -687,7 +686,7 @@ int update_telescope_status(Telescope_Status *status)
        fflush(stderr);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
        sscanf(reply,"%s %s %s",s,s,status->filter_string);
      }
 #endif
@@ -700,7 +699,7 @@ int update_telescope_status(Telescope_Status *status)
        fflush(stderr);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
        sscanf(reply,"%s %lf %lf",s,&(status->ra),&(status->dec));
      }
 
@@ -710,7 +709,7 @@ int update_telescope_status(Telescope_Status *status)
        fflush(stderr);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
 
        s_ptr=reply;
        s_ptr=strstr(s_ptr,":");
@@ -785,7 +784,7 @@ int do_telescope_command(char *command, char *reply, int timeout)
         fflush(stderr);
      }
 
-     if(send_command(command,reply,MACHINE_NAME,COMMAND_PORT,timeout)!=0){
+     if(send_command(command,reply,MACHINE_NAME,TEL_COMMAND_PORT,timeout)!=0){
        fprintf(stderr,
           "do_telescope_command: error sendind command %s\n", command);
        return(-1);
@@ -793,13 +792,13 @@ int do_telescope_command(char *command, char *reply, int timeout)
      }
      if(COMMAND_WAIT_TIME>0)usleep(COMMAND_WAIT_TIME);
 
-     if(strstr(reply,ERROR_REPLY)!=NULL||strlen(reply)==0){
+     if(strstr(reply,TEL_ERROR_REPLY)!=NULL||strlen(reply)==0){
        fprintf(stderr,
           "do_telescope_command: error reading domestatus : %s\n", 
            reply);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
 
         if(verbose1){
             fprintf(stderr,"do_telescope_command: reply was %s\n",reply);
@@ -829,7 +828,7 @@ int do_daytime_telescope_command(char *command, char *reply, int timeout)
         fflush(stderr);
      }
 
-     if(send_command(command,reply,MACHINE_NAME,DAYTIME_COMMAND_PORT,timeout)!=0){
+     if(send_command(command,reply,MACHINE_NAME,DAYTIME_TEL_COMMAND_PORT,timeout)!=0){
        fprintf(stderr,
           "do_telescope_command: error sendind command %s\n", command);
        return(-1);
@@ -837,13 +836,13 @@ int do_daytime_telescope_command(char *command, char *reply, int timeout)
      }
      if(COMMAND_WAIT_TIME>0)usleep(COMMAND_WAIT_TIME);
 
-     if(strstr(reply,ERROR_REPLY)!=NULL||strlen(reply)==0){
+     if(strstr(reply,TEL_ERROR_REPLY)!=NULL||strlen(reply)==0){
        fprintf(stderr,
           "do_telescope_command: error reading domestatus : %s\n", 
            reply);
        return(-1);
      }
-     else if (strstr(reply, DONE_REPLY)!=NULL){
+     else if (strstr(reply, TEL_DONE_REPLY)!=NULL){
 
         if(verbose1){
             fprintf(stderr,"do_telescope_command: reply was %s\n",reply);
