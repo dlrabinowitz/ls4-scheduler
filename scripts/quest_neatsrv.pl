@@ -97,11 +97,11 @@ sub camControl {
 	printf STDERR "Killing read_camera and write_fits\n";
         if ($p_read_camera > 0) {
 #	 kill 9, $p_read_camera;
-         system("$PALOMARDIR/bin/slay read_camera" );
+         system("$LS4_ROOT/bin/slay read_camera" );
         }
         if ($p_write_fits > 0) {
 #	 kill 9, $p_write_fits;
-         system("$PALOMARDIR/bin/slay write_fits" );
+         system("$LS4_ROOT/bin/slay write_fits" );
         }
         $p_read_camera = -1;
         $p_write_fits = -1;
@@ -183,18 +183,18 @@ sub camInit {
 # Kill any old read/write processes
 
     if ($p_read_camera > 0) {
-        system("$PALOMARDIR/bin/slay read_camera" );
+        system("$LS4_ROOT/bin/slay read_camera" );
 #	kill 9, $p_read_camera;
     }
     if ($p_write_fits > 0) {
-        system("$PALOMARDIR/bin/slay write_fits" );
+        system("$LS4_ROOT/bin/slay write_fits" );
 #	 kill 9, $p_write_fits;
     }
     $p_read_camera = -1;
     $p_write_fits = -1;
 
 # Refresh shared memory
-    if (system("$PALOMARDIR/bin/check_shm $nccds 1 1")) {
+    if (system("$LS4_ROOT/bin/check_shm $nccds 1 1")) {
 	printf STDERR "check_shm failed: $!\n";
 	return -1;
     }
@@ -276,7 +276,7 @@ sub camSetPeriod {
 
 # Initialize header info
 sub headerInit {
-    if (system("$PALOMARDIR/bin/hinfo --offsets 0.0 --obsmode 'stare'")) {
+    if (system("$LS4_ROOT/bin/hinfo --offsets 0.0 --obsmode 'stare'")) {
 	printf STDERR "hinfo failed: $!\n";
 	return 1;
     }
@@ -374,9 +374,9 @@ sub read_camera {
 
     my ($nlines,$encode_flag) = @_;
     if ( $encode_flag == 1 ) {
-       printf STDERR "$PALOMARDIR/bin/read_camera -b -s -l $nlines\n";
+       printf STDERR "$LS4_ROOT/bin/read_camera -b -s -l $nlines\n";
     } else {
-       printf STDERR "$PALOMARDIR/bin/read_camera -s -l $nlines\n";
+       printf STDERR "$LS4_ROOT/bin/read_camera -s -l $nlines\n";
     }
     my $pid = 0;
     if ($pid = fork) {
@@ -385,13 +385,13 @@ sub read_camera {
 	return $pid;
     } elsif (defined $pid) {
         if ( $encode_flag == 1 ) {
-	   exec "$PALOMARDIR/bin/read_camera -b -s -l $nlines";
-	   #system ("$PALOMARDIR/bin/read_camera -b -s -l $nlines");
+	   exec "$LS4_ROOT/bin/read_camera -b -s -l $nlines";
+	   #system ("$LS4_ROOT/bin/read_camera -b -s -l $nlines");
 	   #printf STDERR "read_camera fork exitting\n";
 	   #exit(0);
         } else {
-	   exec "$PALOMARDIR/bin/read_camera -s -l $nlines";
-	   #system("$PALOMARDIR/bin/read_camera -s -l $nlines");
+	   exec "$LS4_ROOT/bin/read_camera -s -l $nlines";
+	   #system("$LS4_ROOT/bin/read_camera -s -l $nlines");
 	   #printf STDERR "read_camera fork exitting\n";
 	   #exit(0);
         }
@@ -404,14 +404,14 @@ sub read_camera {
 sub write_fits {
 
     my ($nlines) = @_;
-    printf STDERR "$PALOMARDIR/bin/write_fits -s -p $fileroot -n1  -l $nlines\n";
+    printf STDERR "$LS4_ROOT/bin/write_fits -s -p $fileroot -n1  -l $nlines\n";
     my $pid = 0;
     if ($pid = fork) {
 	# parent returns with pid;
 	printf STDERR "write_fits pid = %d\n", $pid;
 	return $pid;
     } elsif (defined $pid) {
-	system("$PALOMARDIR/bin/write_fits -s -p $fileroot -n1  -l $nlines");
+	system("$LS4_ROOT/bin/write_fits -s -p $fileroot -n1  -l $nlines");
 	printf STDERR "moving $fileroot to destdir \n";
         $wt1 = time();
 	system ("mv $fileroot*.fits $destdir");
@@ -497,7 +497,7 @@ sub waitRead {
            }
            elsif ( $wt > $max_write_time ) {
                printf STDERR "Wait time exceeded. Killing write_fits $p_write_fits\n";
-               system("$PALOMARDIR/bin/slay write_fits");
+               system("$LS4_ROOT/bin/slay write_fits");
                $done = -1;
            }
            elsif ( $wt > $wt_prev + 10 ) {
@@ -547,7 +547,7 @@ sub readout {
            elsif ( $wt > $max_write_time ) {
                printf STDERR "Wait time exceeded. Killing write_fits $p_write_fits\n";
 #	       kill 9, $p_write_fits;
-               system("$PALOMARDIR/bin/slay write_fits");
+               system("$LS4_ROOT/bin/slay write_fits");
                $done = 1;
            }
         } until $done == 1;
@@ -585,7 +585,7 @@ sub readout {
            }
            elsif ( $wt > $max_write_time) {
                printf STDERR "Wait time exceeded. Killing read_camera $p_read_camera\n";
-               system("$PALOMARDIR/bin/slay read_camera" );
+               system("$LS4_ROOT/bin/slay read_camera" );
 #              kill 9, $p_read_camera;
                $done = 1;
            }
@@ -600,7 +600,7 @@ sub readout {
 
     hinfoSet("fileroot",$root);
     runHinfoCommands();
-    if (system("$PALOMARDIR/bin/check_shm $nccds 1")) {
+    if (system("$LS4_ROOT/bin/check_shm $nccds 1")) {
 	printf STDERR "check_shm failed: $!\n";
 	return -1;
     }
@@ -613,7 +613,7 @@ sub readout {
     $p_write_fits = write_fits($nlines, $fileroot);
     if ($p_write_fits == 1)  {
 	printf STDERR "write_fits failed: $!\n";
-        system("$PALOMARDIR/bin/slay read_camera" );
+        system("$LS4_ROOT/bin/slay read_camera" );
 #	system("kill $p_read_camera");
 	return -1;
     }
@@ -623,8 +623,8 @@ sub readout {
     printf STDERR "Starting camRead.\n";
     if (($ret = camRead($nlines)) == -1) {
 	printf STDERR "camRead failed $!\n";
-        system("$PALOMARDIR/bin/slay read_camera" );
-        system("$PALOMARDIR/bin/slay write_fits" );
+        system("$LS4_ROOT/bin/slay read_camera" );
+        system("$LS4_ROOT/bin/slay write_fits" );
 #	system("kill $p_read_camera");
 #	system("kill $p_write_fits");	
 	return -1;
@@ -642,8 +642,8 @@ sub hinfoSet {
     if ($keyword eq 'dec') {
 	hinfoCommand("--stareoffsets $value");
     }
-    printf STDERR "$PALOMARDIR/bin/hinfo --$keyword $value\n";
-    printf $hinfoFH "$PALOMARDIR/bin/hinfo --$keyword $value\n";
+    printf STDERR "$LS4_ROOT/bin/hinfo --$keyword $value\n";
+    printf $hinfoFH "$LS4_ROOT/bin/hinfo --$keyword $value\n";
     if ( $keyword eq 'filtername' ) {
         hinfoCommand("--filtername $value --filtername $value --filtername $value --filtername $value");
     }
@@ -652,8 +652,8 @@ sub hinfoSet {
 
 sub hinfoCommand {
     my ($command) = @_;
-    printf STDERR "$PALOMARDIR/bin/hinfo $command\n";
-    printf $hinfoFH "$PALOMARDIR/bin/hinfo $command\n"
+    printf STDERR "$LS4_ROOT/bin/hinfo $command\n";
+    printf $hinfoFH "$LS4_ROOT/bin/hinfo $command\n"
 }
 
 sub openHinfoFile {
@@ -732,7 +732,7 @@ sub camStatus {
 ######################################################################
 sub get_config_info {
     
-    my $cfgfile = "$PALOMARDIR/config/quest_neat.cfg";
+    my $cfgfile = "$LS4_ROOT/config/quest_neat.cfg";
     my $neatcfg = new FileHandle "<  $cfgfile"
 	or die "Could not open $cfgfile: $!";
     my $nmatch = 0;
@@ -874,7 +874,7 @@ $\ = "\0";
 
 # Run initialization sequence to make sure camera, disk, are ready
 
-#if (system("$PALOMARDIR/gui/neatinit.tcl")) {
+#if (system("$LS4_ROOT/gui/neatinit.tcl")) {
 #    printf STDERR "Initialization failed.\n";
 ##    exit 1;
 #}

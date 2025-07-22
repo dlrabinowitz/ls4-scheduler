@@ -10,7 +10,7 @@ use IO::Select;
 
 sub get_config_info {
     
-    my $cfgfile = "$PALOMARDIR/config/quest_neat.cfg";
+    my $cfgfile = "$LS4_ROOT/questlib/quest_neat.cfg";
     my $neatcfg = new FileHandle "<  $cfgfile"
 	or die "Could not open $cfgfile: $!";
     my $nmatch = 0;

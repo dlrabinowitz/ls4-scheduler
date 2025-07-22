@@ -18,7 +18,7 @@ double get_beta(double ra, double dec);
 
 
 /************************************************/
-ecliptic_to_equator(lon,lat,ra,dec)
+void ecliptic_to_equator(lon,lat,ra,dec)
 double lon,lat,*ra,*dec;
 {
 	double cos_dec,sin_dec,sin_ra;
@@ -56,7 +56,7 @@ double lon,lat,*ra,*dec;
 	return;
 }
 /*****************************************************************************/
-equator_to_ecliptic(ra,dec,lon,lat)
+void equator_to_ecliptic(ra,dec,lon,lat)
 double ra,dec,*lon,*lat;
 {
 	ra=ra*RAD_PER_DEG;

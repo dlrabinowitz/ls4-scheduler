@@ -347,11 +347,12 @@ LEGALITIES:
 #include <stdarg.h>
 #include <string.h>
 #include "sky_utils.h"
-#define FAKE_TELESCOPE
+//#define FAKE_TELESCOPE
 
 FILE *sclogfl = NULL;
 
-int no_print=1; /* global variable. If = 0, shut off oprntf */
+int no_print=1; /* global variable. If = 1, shut off oprntf */
+int no_print_prev = 1;
 
 void oprntf(char *fmt, ...)
 
@@ -376,7 +377,11 @@ void oprntf(char *fmt, ...)
 	char cval;
 	double dval;
 
-        if(no_print==0)return;
+    if (no_print != no_print_prev ){
+       fprintf(stderr,"oprntf: no_print has changed from %d to %d\n",no_print_prev,no_print);
+       no_print_prev = no_print;
+    }
+    if(no_print==1)return;
 
 	va_start(ap,fmt);
 	for (p = fmt; *p; p++) {
@@ -455,6 +460,8 @@ void oprntf(char *fmt, ...)
 	                ;
 		}
 	}
+    fflush(stderr);
+    fflush(stdout);
 	va_end(ap);
 }
 
@@ -942,48 +949,23 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 	char obs_code[3];  /* need only one char, but why not? */
 	char errprompt[50];
 
-        /* if site_name is preset to "DEFAULT", then use ESO La Silla
-           (obs_code="e") as the site */
+    /* if site_name is preset to "DEFAULT", then use ESO La Silla
+       (obs_code="e") as the site */
 
-        if(strstr(site_name,"DEFAULT")!=NULL){
-          obs_code[0]=DEFAULT_OBSCODE;
-        }
-
-        /* otherwise choose from a list */
-
-        else{
-
-
-	printf("*SELECT SITE* - Enter single-character code:\n");
-	printf("   n .. NEW SITE, prompts for all parameters.\n");
-	printf("   x .. exit without change (current: %s)\n",site_name);
-	printf("   k .. Kitt Peak [MDM Obs.]\n");
-	printf("   s .. Shattuck Observatory, Dartmouth College, Hanover NH\n"); 
-/*      printf("   K .. Keele Observatory, Keele, Staffordshire, England\n");  */
-	printf("   a .. Anglo-Australian Telelescope, Siding Spring\n");
-	printf("   e .. European Southern Obs, La Silla\n");
-/*	printf("   b .. Black Moshannon Obs., Penn State U.\n");  */
-	printf("   d .. Dominion Astrophysical Obs., Victoria, BC\n");
-/*	printf("   H .. Harvard College Observatory, Cambridge, MA\n");  */
-	printf("   h .. Mt. Hopkins, AZ (MMT, FLWO)\n");
-	printf("   l .. Lick Observatory\n");
-	printf("   m .. Mauna Kea, Hawaii\n");
-	printf("   p .. Palomar Observatory\n");
-/*      printf("   P .. Observatoire du Pic du Midi, Pyrenees\n");  */
-	printf("   r .. Roque de los Muchachos, La Palma, Canary Is.\n");
-	printf("   t .. Cerro Tololo \n");
-	printf("   T .. McDonald Observatory, Mt. Locke, Texas\n");
-        printf("   z .. South African Astronomical Observatory, Sutherland\n");
-	printf("Your answer --> ");
-
-	scanf("%s",obs_code);
-        }
+    if(strstr(site_name,"DEFAULT")!=NULL){
+      obs_code[0]=DEFAULT_OBSCODE;
+    }
+    else if(strstr(site_name,"Fake")!=NULL ||
+        strstr(site_name,"fake")!=NULL ||
+        strstr(site_name,"FAKE")!=NULL){
+      obs_code[0]=FAKE_OBSCODE;
+    }
 
 	if(obs_code[0] == 'x') {
 		printf("No action taken.  Current site = %s.\n",site_name);
 		return;
 	}
-	if(obs_code[0] == 'k') {
+	else if(obs_code[0] == 'k') {
 		strcpy(site_name,"Kitt Peak [MDM Obs.]");
 		strcpy(zone_name, "Mountain");
 		*zabr = 'M';
@@ -1028,24 +1010,28 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 		*stdz = -10.;
 	}
 	else if (obs_code[0] == 'e') {
-		strcpy(site_name, "ESO, Cerro La Silla");
+		strcpy(site_name, "ESO_SCHMIDT");
 		strcpy(zone_name, "Chilean");
 		*zabr = 'C';
 		*use_dst = -1;
-#ifdef FAKE_TELESCOPE
+		*longit = 4.7153;
+		*stdz = 4.;
+		*lat = -29.257;
+		*elevsea = 2347.;
+		*elev = 2347.; /* for ocean horizon, not Andes! */
+		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
+		fflush(stdout);
+	}
+	else if (obs_code[0] == 'f') {
 		strcpy(site_name, "Fake Site");
 		strcpy(zone_name, "Fake Location");
 		*zabr = 'F';
 		*longit = 16.7153;
 		*stdz = 16.;
-#else
-		*longit = 4.7153;
-		*stdz = 4.;
-#endif
 		*lat = -29.257;
 		*elevsea = 2347.;
 		*elev = 2347.; /* for ocean horizon, not Andes! */
-		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
+		printf("\n\n** Will use daylght time, Fakedate conventions. \n\n");
 		fflush(stdout);
 	}
 	else if (obs_code[0] == 'b') {
@@ -4260,7 +4246,8 @@ void print_tonight(struct date_time date, double lat, double longit,
 	short dow; /* day of week */
 	float set_to_rise=0.0, twi_to_twi=0.0, moon_print;
 		
-        no_print=print_flag;   
+    no_print= 1 - print_flag;   
+    fprintf(stderr,"print_flag: %d  no_print %d:\n",print_flag,no_print);
 
 	find_dst_bounds(date.y,stdz,use_dst,jdb,jde);
 	locjdb = *jdb-stdz/24.;
@@ -4576,6 +4563,8 @@ void print_tonight(struct date_time date, double lat, double longit,
        ntimes->percent_moon=ill_frac;
     }
 
+    fflush(stderr);
+    fflush(stdout);
     no_print=1;
 }
 

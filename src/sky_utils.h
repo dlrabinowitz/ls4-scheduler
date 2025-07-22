@@ -12,6 +12,7 @@
 
 /*#define DEFAULT_OBSCODE 'p'*/ /* Palomar */
 #define DEFAULT_OBSCODE 'e' /* La Silla */
+#define FAKE_OBSCODE 'f' /* La Silla  + 12 h*/
 
 /* a couple of the system-dependent magic numbers are defined here */
 
@@ -19,7 +20,7 @@
    2 means they don't.  This is used by compiler switches in file 5 and
    the main program.  */
 
-#define LOG_FILES_OK 1  /* 1 means that log files are enabled.
+#define LOG_FILES_OK 0  /* 1 means that log files are enabled.
 			Any other value means they're not.  */
 
 #define MAX_OBJECTS 500

@@ -43,6 +43,8 @@ struct timeval t_exp_start;
 
 Camera_Status cam_status;
 
+extern char *host_name;
+
 int command_id = 0;
 /*****************************************************/
 
@@ -377,7 +379,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        gettimeofday(&t_exp_start, NULL);
 
        command_id++;
-       if(do_camera_command(command,reply,timeout,command_id)!=0){
+       if(do_camera_command(command,reply,timeout,command_id,host_name)!=0){
          fprintf(stderr,"take_exposure: error sending exposure command : %s\n",command);
          fprintf(stderr,"take_exposure: reply was : %s\n",reply);
          *actual_expt=0.0;
@@ -501,7 +503,7 @@ int imprint_fits_header(Fits_Header *header)
       sprintf(command,"%s %s %s",
 		HEADER_COMMAND,header->fits_word[i].keyword,
                 header->fits_word[i].value);
-      if(do_camera_command(command,reply,CAMERA_TIMEOUT_SEC,command_id)!=0){
+      if(do_camera_command(command,reply,CAMERA_TIMEOUT_SEC,command_id,host_name)!=0){
         fprintf(stderr,
           "imprint_fits_header: error sending command %s\n",command);
         return(-1);
@@ -624,7 +626,7 @@ int init_camera()
        fflush(stderr);
      }
 
-     if(do_camera_command(INIT_COMMAND,reply,CAMERA_TIMEOUT_SEC)!=0){
+     if(do_camera_command(INIT_COMMAND,reply,CAMERA_TIMEOUT_SEC,host_name)!=0){
        fprintf(stderr,"error sending camera init command\n");
        result = -1;
      }
@@ -655,7 +657,7 @@ int update_camera_status(Camera_Status *status)
      error_flag=0;
 
      command_id++;
-     if(do_status_command(STATUS_COMMAND,reply,CAMERA_TIMEOUT_SEC,command_id)!=0){
+     if(do_status_command(STATUS_COMMAND,reply,CAMERA_TIMEOUT_SEC,command_id,host_name)!=0){
        return(-1);
      }
      else {
@@ -719,7 +721,7 @@ void *do_camera_command_thread(void *args){
 			  id,t_start,command,timeout_sec);
           fflush(stderr);
         }
-        *result = do_camera_command(command,reply, timeout_sec,id);
+        *result = do_camera_command(command,reply, timeout_sec,id,host_name);
 	t_end = get_ut();
         if(verbose1){
           fprintf(stderr,"do_camera_command_thread[%d]: done time %12.6f : result is [%d] \n",id,t_end,*result);
@@ -735,15 +737,15 @@ void *do_camera_command_thread(void *args){
      pthread_exit(result);
 }
 
-int do_status_command(char *command, char *reply, int timeout_sec,int id){
-    return do_command(command, reply, timeout_sec, STATUS_PORT,id);
+int do_status_command(char *command, char *reply, int timeout_sec,int id, char *host){
+    return do_command(command, reply, timeout_sec, STATUS_PORT,id, host);
 }
 
-int do_camera_command(char *command, char *reply, int timeout_sec, int id){
-    return do_command(command, reply, timeout_sec, COMMAND_PORT,id);
+int do_camera_command(char *command, char *reply, int timeout_sec, int id, char *host){
+    return do_command(command, reply, timeout_sec, COMMAND_PORT,id, host);
 }
 
-int do_command(char *command, char *reply, int timeout_sec, int port,int id){
+int do_command(char *command, char *reply, int timeout_sec, int port,int id, char *host){
 
      int returnval = 0;
 
@@ -753,7 +755,7 @@ int do_command(char *command, char *reply, int timeout_sec, int port,int id){
           fflush(stderr);
      }
 
-     if(send_command(command,reply,MACHINE_NAME,port, timeout_sec)!=0){
+     if(send_command(command,reply,host,port, timeout_sec)!=0){
          fprintf(stderr,
           "do_command[%d]: error sending command %s\n", id,command);
          returnval = -1;
@@ -893,7 +895,7 @@ int clear_camera()
      sprintf(command_string,"%s %d",CLEAR_COMMAND,CLEAR_TIME);
 
      command_id++;
-     if(do_camera_command(command_string,reply,timeout,command_id)!=0){
+     if(do_camera_command(command_string,reply,timeout,command_id,host_name)!=0){
        return(-1);
      }
      else {

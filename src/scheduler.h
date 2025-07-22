@@ -24,7 +24,7 @@
 
 #define SNE_SHIFT 0 /* set to 1 to shift paired fields by 1.0 deg, 0 for 0.5 deg */
 #define FAKE_RUN 0 /* set to 1 for simulated obs */
-#define UT_OFFSET 21.00 /* ut offset for debugging */
+#define UT_OFFSET 0.00 /* ut offset for debugging */
 #define DEEP_DITHER_ON 0 /* turn on dithering for deep coadds */
 #
 #define USE_TELESCOPE_OFFSETS 0 /* change to 1 to use telescope_offsets file for offset */
@@ -131,7 +131,10 @@
 #define MAX_FOCUS_DEVIATION 0.05 /* maximum difference between set focus and returned
                                     focus */
 
-
+// selection codes set by get_next_field()
+enum Selection_Code {NOT_SELECTED,FIRST_DO_NOW_FLAT, FIRST_DO_NOW_DARK, FIRST_DO_NOW, FIRST_READY_PAIR, FIRST_LATE_PAIR,
+      FIRST_NOT_READY_LATE_PAIR, FIRST_NOT_READY_NOT_LATE_PAIR, LEAST_TIME_LATE_MUST_DO,
+      LEAST_TIME_READY_MUST_DO, LEAST_TIME_READY, MOST_TIME_READY_LATE};
 
 // define accepted filter names and enumerate an index for each filter name
 #define FILTER_NAME (const char*[]) { "rgzz", "none", "fake", "clear", NULL }
@@ -142,6 +145,7 @@ typedef struct {
     int status; /* 0 if not doable, 2 if must observe pronto, 1 if ready to observe,
                    -1 if not enough time to observe remaining fields */
     int doable; /* 1 if all required observations possible, 0 if not */
+    enum Selection_Code selection_code;
     int field_number;
     int line_number;
     char script_line[STR_BUF_LEN];    
@@ -157,6 +161,8 @@ typedef struct {
     double interval; /* interval between observations ( hours) */
     int n_required; /* requested number of observations (normally 3) */
     int survey_code; /* type of survey field (TNO_SURVEY_CODE or SNE_SURVEY_CODE) */
+    double ut_rise; /* ut (hrs) when field rises above airmass threshold */
+    double ut_set;  /* ut (hrss) when field sets below airmass threshold */
     double jd_rise; /* jd (days) when field rises above airmass threshold */
     double jd_set;  /* jd (days) when field sets below airmass threshold */
     double jd_next; /* jd (days) for next observation */
@@ -351,7 +357,7 @@ int save_obs_record(Field *sequence, FILE *obs_record, int num_fields,
 int adjust_date(struct date_time *date, int n_days);
 
 int init_night(struct date_time date, Night_Times *nt, 
-                                     Site_Params *site);
+                      Site_Params *site, int print_flag);
 
 int load_sequence(char *script_name, Field *sequence);
 
@@ -427,8 +433,8 @@ int init_telescope_offsets(Telescope_Status *status);
 int get_telescope_offsets(Field *f, Telescope_Status *status);
 int point_telescope(double ra, double dec,double ra_rate, double dec_rate);
 int update_telescope_status(Telescope_Status *status);
-int do_telescope_command(char *command, char *reply,int timeout);
-int do_daytime_telescope_command(char *command, char *reply,int timeout);
+int do_telescope_command(char *command, char *reply,int timeout, char *host);
+int do_daytime_telescope_command(char *command, char *reply,int timeout, char *host);
 int print_telescope_status(Telescope_Status *status, FILE *output);
 double get_tm(struct tm *tm_out);
 double get_ut();
@@ -452,9 +458,9 @@ int init_camera();
 int clear_camera();
 int update_camera_status(Camera_Status *cam_status);
 void *do_camera_command_thread(void *args);
-int do_status_command(char *command, char *reply, int timeout_sec,int id);
-int do_camera_command(char *command, char *reply, int timeout_sec, int id);
-int do_command(char *command, char *reply, int timeout_sec, int port, int id);
+int do_status_command(char *command, char *reply, int timeout_sec,int id, char *host);
+int do_camera_command(char *command, char *reply, int timeout_sec, int id, char *host);
+int do_command(char *command, char *reply, int timeout_sec, int port, int id, char *host);
 int bad_readout();
 int get_filename(char *filename,struct tm *tm,int shutter);
 int wait_camera_readout(Camera_Status *status);
@@ -463,7 +469,7 @@ double expose_timeout (char *exp_mode, double exp_time, bool wait_flag);
 
 /* from scheduler_status.c*/
 
-int init_status_name();
+int init_status_names();
 int binary_string_to_int(char *binaryString) ;
 int int_to_binary_string(int n, char *string);
 int get_value_string(char *reply, char *keyword, char *separator, char *value_string);
@@ -494,6 +500,24 @@ int add_fits_word(Fits_Header *header, char *keyword, char *value);
 /* from scheduler_socket.c */
 int send_command(char *command, char *reply, char *machine, 
 			int port, int timeout_sec);
+
+/* from scheduler_telescope.c*/
+
+
+int init_telescope_offsets(Telescope_Status *status);
+int get_telescope_offsets(Field *f, Telescope_Status *status);
+int focus_telescope(Field *f, Telescope_Status *status, double focus_default);
+int stow_telescope();
+int set_telescope_focus(double focus);
+int get_telescope_focus(double *focus);
+int stop_telescope();
+int point_telescope(double ra, double dec, double ra_rate, double dec_rate);
+int update_telescope_status(Telescope_Status *status);
+int print_telescope_status(Telescope_Status *status,FILE *output);
+int do_telescope_command(char *command, char *reply, int timeout, char *host);
+int do_daytime_telescope_command(char *command, char *reply, int timeout, char *host);
+int advance_tm_day(struct tm *tm);
+int leap_year_check(int year);
 
 extern double sin(),fabs();
 

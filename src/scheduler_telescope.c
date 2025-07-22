@@ -11,7 +11,6 @@
 
 
 
-#define MACHINE_NAME "pco-nuc"
 #define TEL_COMMAND_PORT 3911  /*nightime */
 /*#define TEL_COMMAND_PORT 3912 daytime */
 #define DAYTIME_TEL_COMMAND_PORT 3912
@@ -69,6 +68,7 @@ extern int verbose;
 extern int verbose1;
 extern int stop_flag;
 extern int stow_flag;
+extern char *host_name;
 
 /*****************************************************/
 
@@ -189,8 +189,7 @@ int get_telescope_offsets(Field *f, Telescope_Status *status)
         }
          
         if(verbose){
-            fprintf(stderr,"get_telescope_offsets: Reading new offsets\n",
-		f->field_number);
+            fprintf(stderr,"get_telescope_offsets: Reading new offsets\n");
             fflush(stderr);
         }
 
@@ -424,7 +423,7 @@ int stow_telescope()
 
     sprintf(command,STOW_COMMAND);
 
-    if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC)!=0){
+    if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC,host_name)!=0){
         fprintf(stderr,"stow_telescope: stow error: reply : %s\n",reply);
         return(-1);
     }
@@ -476,7 +475,7 @@ int set_telescope_focus(double focus)
 
         sprintf(command,"%s %9.5f",SETFOCUS_COMMAND,focus1);
 
-        if(do_telescope_command(command,reply,TELESCOPE_FOCUS_TIMEOUT_SEC)!=0){
+        if(do_telescope_command(command,reply,TELESCOPE_FOCUS_TIMEOUT_SEC,host_name)!=0){
             fprintf(stderr,"set_telescope_focus: setfocus reply error: reply : %s\n",reply);
             return(-1);
         }
@@ -511,7 +510,7 @@ int set_telescope_focus(double focus)
 
         sprintf(command,"%s %9.5f",SETFOCUS_COMMAND,focus);
 
-        if(do_telescope_command(command,reply,TELESCOPE_FOCUS_TIMEOUT_SEC)!=0){
+        if(do_telescope_command(command,reply,TELESCOPE_FOCUS_TIMEOUT_SEC,host_name)!=0){
             fprintf(stderr,"set_telescope_focus: setfocus reply error: reply : %s\n",reply);
             return(-1);
         }
@@ -550,7 +549,7 @@ int get_telescope_focus(double *focus)
 
      *focus= NOMINAL_FOCUS_DEFAULT;
 
-     if(do_telescope_command(GETFOCUS_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT)!=0){
+     if(do_telescope_command(GETFOCUS_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT,host_name)!=0){
        fprintf(stderr,"get_telescope_focus: error getting focus\n");
        fflush(stderr);
        return(-1);
@@ -584,7 +583,7 @@ int stop_telescope()
 
     sprintf(command,STOP_COMMAND);
 
-    if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC)!=0){
+    if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC,host_name)!=0){
         fprintf(stderr,"stop_telescope: stop error: reply : %s\n",reply);
         return(-1);
     }
@@ -609,7 +608,7 @@ int point_telescope(double ra, double dec, double ra_rate, double dec_rate)
     if (ra>24.0)ra=ra-24.0;
     sprintf(command,"%s %9.6f %9.5f",TRACK_COMMAND,ra,dec);
 
-    if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC)!=0){
+    if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC,host_name)!=0){
         fprintf(stderr,"point_telescope: pointing error: reply : %s\n",reply);
         return(-1);
     }
@@ -622,7 +621,7 @@ int point_telescope(double ra, double dec, double ra_rate, double dec_rate)
 
     if(ra_rate!=0.0||dec_rate!=0.0){
        sprintf(command,"%s %9.6f %9.6f",SET_TRACKING_COMMAND,ra_rate,dec_rate);
-       if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC)!=0){
+       if(do_telescope_command(command,reply,TELESCOPE_POINT_TIMEOUT_SEC,host_name)!=0){
            fprintf(stderr,"point_telescope: set_tracking error: reply : %s\n",reply);
            return(-1);
         }
@@ -647,7 +646,7 @@ int update_telescope_status(Telescope_Status *status)
 
      status->ut=get_ut();
 
-     if(do_telescope_command(DOMESTATUS_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT)!=0){
+     if(do_telescope_command(DOMESTATUS_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT,host_name)!=0){
        fprintf(stderr,"update_telescope_status: error getting domestatus\n");
        fflush(stderr);
        return(-1);
@@ -662,7 +661,7 @@ int update_telescope_status(Telescope_Status *status)
      }
 
 
-     if(do_telescope_command(LST_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT)!=0){
+     if(do_telescope_command(LST_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT,host_name)!=0){
        fprintf(stderr,"update_telescope_status: error getting lst\n");
        fflush(stderr);
        return(-1);
@@ -681,7 +680,7 @@ int update_telescope_status(Telescope_Status *status)
      }
 
 #if 0
-     if(do_daytime_telescope_command(FILTER_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT)!=0){
+     if(do_daytime_telescope_command(FILTER_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT,host)!=0){
        fprintf(stderr,"update_telescope_status: error getting filter\n");
        fflush(stderr);
        return(-1);
@@ -694,7 +693,7 @@ int update_telescope_status(Telescope_Status *status)
 
 
 
-     if(do_telescope_command(POSRD_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT)!=0){
+     if(do_telescope_command(POSRD_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT,host_name)!=0){
        fprintf(stderr,"update_telescope_status: error getting position\n");
        fflush(stderr);
        return(-1);
@@ -704,7 +703,7 @@ int update_telescope_status(Telescope_Status *status)
      }
 
 
-     if(do_telescope_command(WEATHER_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT)!=0){
+     if(do_telescope_command(WEATHER_COMMAND,reply,TELESCOPE_COMMAND_TIMEOUT,host_name)!=0){
        fprintf(stderr,"update_telescope_status: error getting weather\n");
        fflush(stderr);
        return(-1);
@@ -776,7 +775,7 @@ int print_telescope_status(Telescope_Status *status,FILE *output)
 
 /*****************************************************/
 
-int do_telescope_command(char *command, char *reply, int timeout)
+int do_telescope_command(char *command, char *reply, int timeout, char *host)
 {
 
      if(verbose1){
@@ -784,7 +783,7 @@ int do_telescope_command(char *command, char *reply, int timeout)
         fflush(stderr);
      }
 
-     if(send_command(command,reply,MACHINE_NAME,TEL_COMMAND_PORT,timeout)!=0){
+     if(send_command(command,reply,host,TEL_COMMAND_PORT,timeout)!=0){
        fprintf(stderr,
           "do_telescope_command: error sendind command %s\n", command);
        return(-1);
@@ -820,7 +819,7 @@ int do_telescope_command(char *command, char *reply, int timeout)
 /* use this function in daytime when telescope controller is off or when
    dome has not yet opened */
 
-int do_daytime_telescope_command(char *command, char *reply, int timeout)
+int do_daytime_telescope_command(char *command, char *reply, int timeout, char *host)
 {
 
      if(verbose1){
@@ -828,7 +827,7 @@ int do_daytime_telescope_command(char *command, char *reply, int timeout)
         fflush(stderr);
      }
 
-     if(send_command(command,reply,MACHINE_NAME,DAYTIME_TEL_COMMAND_PORT,timeout)!=0){
+     if(send_command(command,reply,host,DAYTIME_TEL_COMMAND_PORT,timeout)!=0){
        fprintf(stderr,
           "do_telescope_command: error sendind command %s\n", command);
        return(-1);

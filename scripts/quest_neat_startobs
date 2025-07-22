@@ -4,14 +4,15 @@
 #
 # syntax: quest_neat_startobs
 #
-# Program looks for directory "/home/observer/palomar/scripts/$d"
+# Program looks for directory "$OBSPLAN_DIR/$d"
 # where $d is the ut for the night (yyyymmdd) and also looks for
-# an obsplan named $d.obsplan there. If found, it kill any ongoing
-# scheduler, transfer scripts, quest_neatsrv perl script, the 
-# realtime analysis script, and the quest_neat_qa script. It then
-# restart the quest_neatsrv script. This creates a data directory
-# with the ut date (yyyymmdd) and a subdirectory for logs. It then
-# copies the current observing script to the log directory, starts
+# an obsplan named $d.obsplan there. If found, it kill any currently
+# running instances of the scheduler and of auxilary scripts to 
+# to transfer and analyze the image data. It then restarts
+# the camera control program. This creates a data directory
+# at $QUESTNEATDATADIR named with the ut date (yyyymmdd) and 
+# containing a subdirectory for logs. It then
+# copies the current observing script to that log directory, starts
 # the scheduler from that directory, and starts all the other
 # scripts. All the logs from the various scripts go the the log
 # subdirecory
@@ -22,7 +23,8 @@
 # subdirectory). To restart at the beginning of the obs script,
 # use "quest_neat_startobs new".
 # 
-# To stop the scheduler and shut down the camera, use "quest_neat_startobs stop"
+# To stop the scheduler and shut down the camera, use 
+# "quest_neat_startobs stop"
 #
 set RECIPIENTS = "david.rabinowitz@yale.edu"
 unalias rm
@@ -48,7 +50,7 @@ endif
 #
 #
 
-source /home/observer/.login
+source $LS4_ROOT/.login
 unalias cp
 set d = `get_ut_date`
 set d0 = `echo $d | cut -c 1-8`
@@ -57,10 +59,10 @@ set TEMP_FILE = "/tmp/quest_neat_startobs.tmp"
 set SCRIPTDIR = "$OBSPLAN_DIR/$d0"
 set SCRIPT = "$SCRIPTDIR/$d0.obsplan"
 set SCRIPT_LOG = "$d.log"
-#set OFFSET_FILE = "/home/observer/telescope_offsets.dat"
-#set OFFSET_LOG = "/home/observer/logs/telescope_offsets.log"
-#set STARTOBS_LOG = "/home/observer/logs/startobs.log"
-#set SCHEDULER_PROGRAM = "/home/observer/scheduler/bin/scheduler"
+#set OFFSET_FILE = "$LS4_ROOT/telescope_offsets.dat"
+#set OFFSET_LOG = "$LS4_ROOT/logs/telescope_offsets.log"
+#set STARTOBS_LOG = "$LS4_ROOT/logs/startobs.log"
+#set SCHEDULER_PROGRAM = "$LS4_ROOT/bin/scheduler"
 #set VERBOSE_FLAG = 0
 set HOUR_LIMIT = 24
 #
@@ -128,7 +130,7 @@ if ( ! -e $SCRIPT ) then
    endif
    if ( $h < $HOUR_LIMIT ) then
        echo "rechecking in 30 minutes" >> $STARTOBS_LOG
-       at -f "/home/observer/bin/quest_neat_startobs" now + 30 minutes
+       at -f "$LS4_ROOT/bin/quest_neat_startobs" now + 30 minutes
    else
        echo " couldn't find obsplan. Giving up at  `date`" >> $STARTOBS_LOG
    endif
@@ -143,18 +145,6 @@ if ( ! -e $SCRIPT ) then
 endif
 #
 
-if ( 0 ) then
-echo "slaying any ongoing realtime_transfer" >> $STARTOBS_LOG
-slay realtime_transfer >>& $STARTOBS_LOG
-slay quest_neat_transfer >>& $STARTOBS_LOG
-#
- echo "slaying any ongoing qa script" >> $STARTOBS_LOG
-slay quest_neat_qa >>& $STARTOBS_LOG
-#
-echo "killing any ongoing scheduler" >>& $STARTOBS_LOG
-slay scheduler >>& $STARTOBS_LOG
-#
-endif
 
 echo "restarting ccp " >> $STARTOBS_LOG
 $LS4_ROOT/bin/restart_ccp $data_path >>& $STARTOBS_LOG
@@ -205,7 +195,11 @@ set d_local = `get_ut_date local`
 set dy = `echo $d_local | cut -c 1-4`
 set dm = `echo $d_local | cut -c 5-6`
 set dd = `echo $d_local | cut -c 7-8`
+if ( $FAKE_OBS ) then
+  @ dd = $dd - 1
+endif
 set date_string = "$dy $dm $dd"
+echo "starting scheduler for date $date_string"
 echo "$SCHEDULER_PROGRAM $SCRIPT $date_string  $VERBOSE_FLAG" >>& $STARTOBS_LOG
 $SCHEDULER_PROGRAM  $SCRIPT $date_string  $VERBOSE_FLAG >>& $SCRIPT_LOG  &
 #
