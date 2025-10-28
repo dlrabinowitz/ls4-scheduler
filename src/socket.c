@@ -32,6 +32,13 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
 
   for(i=0;i<MAXBUFSIZE;i++)reply[i]=0;
 
+  if(verbose1){
+     fprintf(stderr,"send_command[%d]: %12.6f command : [%s] of len %ld at [%ld]\n\n",
+               port,get_ut(),command,strlen(command),command);
+     fflush(stderr);
+  }
+     
+
   if(strlen(command)>MAXBUFSIZE){
      fprintf(stderr,"send_command[%d]: command size too long : %s\n",
                port,command);
@@ -56,8 +63,8 @@ int send_command(char *command, char *reply, char *machine, int port, int timeou
 
 
   if(verbose1){
-            fprintf(stderr,"send_command [%d]: %12.6f writing command : %s\n",
-		port,get_ut(),command);
+            fprintf(stderr,"send_command [%d]: %12.6f writing command : [%s] at [%ld]\n\n",
+		port,get_ut(),command,command);
             fflush(stderr);
   }
 
@@ -161,6 +168,9 @@ int read_data(int s,        /* connected socket */
     struct timeval tv;
     long int t,t_start,t_end;
 
+    char *buf_ptr;
+
+    buf_ptr = buf;
     if (timeout_sec <= 0) {
 	fprintf(stderr,"timeout [%d] <= 0\n",timeout_sec);fflush(stderr);
  	return(-1);
@@ -178,32 +188,42 @@ int read_data(int s,        /* connected socket */
     t = t_start;
     t_end = t_start + timeout_sec;
     while (bcount < n && t < t_end) { /* loop until full buffer */
- 	if ((br= read(s,buf,n-bcount)) > 0) {
+ 	  if ((br= read(s,buf_ptr,n-bcount)) > 0) {
  	    bcount += br; /* increment byte counter */
-	    if(verbose1){
-	      fprintf(stderr,"read_data: %d/%d bytes read\n",bcount,n);
-	      fflush(stderr);
-	    }
- 	    buf += br; /* move buffer ptr for next read */
+	    //if(verbose1){
+	    //  fprintf(stderr,"read_data: %d/%d bytes read\n",bcount,n);
+	    //  fflush(stderr);
+	    //}
+ 	    buf_ptr += br; /* move buffer ptr for next read */
 	    gettimeofday(&tv,NULL);
 	    t = tv.tv_sec;
- 	}
- 	if (br < 0){ /* signal an error to the caller */
-	    fprintf(stderr,"read error\n");fflush(stdout);
+ 	  } //if
+
+      // exit on read error
+ 	  if (br < 0){ /* signal an error to the caller */
+	    fprintf(stderr,"read_data: ERROR read error\n");fflush(stderr);
 	    if(verbose1){
 	      fprintf(stderr,"read_data: only %d/%d bytes read\n",bcount,n);
 	      fflush(stderr);
 	    }
-	    perror("read error");
+	    perror("read_data: ERROR read error");
  	    return(-1);
-	}
-        else if (*buf==0||br==0)
-           return(bcount);
+	  } 
+
+      // reads is complete when *buf_ptr=0 (end of string) or br = (no more bytes to read)
+      else if (*buf_ptr==0 || br == 0){
+	    if(verbose1){
+	       fprintf(stderr,"read_data: done reading socket with %d/%d bytes read\n",bcount,n);
+	       fprintf(stderr,"read_data: buffer is [%s]\n",buf);
+	       fflush(stderr);
+	    }
+        return(bcount);
+      } 
     }
-    
+
     if (t >= t_end ){
-       fprintf(stderr,"timeout reading %d btyes, only %d read\n",n,bcount);fflush(stdout);
-       return (-1);
+        fprintf(stderr,"read_data: ERROR timeout reading %d btyes, only %d read\n",n,bcount);fflush(stderr);
+        return (-1);
     }
 
     return(bcount);
@@ -216,13 +236,16 @@ int write_data(int s,         /* connected socket */
 { 
     int bcount, /* counts bytes read */
     br; /* bytes read this pass */
+    char *buf_ptr;
 
+    /* don't want to alter buf, just buf_ptr */
+    buf_ptr =  buf;
     bcount= 0;
     br= 0;
     while (bcount < n) { /* loop until full buffer */
- 	if ((br= write(s,buf,n-bcount)) > 0) {
+ 	if ((br= write(s,buf_ptr,n-bcount)) > 0) {
  	    bcount += br; /* increment byte counter */
- 	    buf += br; /* move buffer ptr for next read */
+ 	    buf_ptr += br; /* move buffer ptr for next read */
  	}
  	if (br < 0) /* signal an error to the caller */
  	    return(-1);

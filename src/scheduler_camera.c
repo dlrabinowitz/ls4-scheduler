@@ -14,6 +14,10 @@
 #define BAD_ERROR_CODE 2
 #define BAD_READOUT_TIME 60.0
 
+// set SKIP_STATUS_CHECK to True to skip the camera
+// status check in wait_exp_done
+#define SKIP_STATUS_CHECK True
+
 typedef struct{
    char *command;
    char *reply;
@@ -31,7 +35,7 @@ sem_t command_start_semaphore;
 /* set status_channel_active to True if ls4_ccp has been configured
  * to reply to status queries on a dedicated socket */
 
-bool status_channel_active = False;
+bool status_channel_active = True; 
 
 /* readout_pending will be True while an exposure is occuring  */
 bool readout_pending = False;
@@ -46,8 +50,52 @@ Camera_Status cam_status;
 extern char *host_name;
 
 int command_id = 0;
-/*****************************************************/
+enum Amp_Direction_Code amp_dir_code =  BOTH_AMP_DIR;
+double readout_time_sec = BOTH_AMP_READOUT_TIME_SEC;
 
+/*****************************************************/
+/* given amp direction string (must be "BOTH", "LEFT", or
+   "RIGHT" or lower cases) set the expected readout time in
+  in sec and return total exposure overhead in hours
+*/
+
+double init_cam_readout_time(char *amp_direction)
+{
+   double exp_overhead_hours = 0.0;
+
+   if(strcmp(amp_direction,BOTH_AMP_SELECTION_STR)==0){
+     amp_dir_code = BOTH_AMP_DIR;
+   }
+   else if(strcmp(amp_direction,LEFT_AMP_SELECTION_STR)==0){
+     amp_dir_code = LEFT_AMP_DIR;
+   }
+   else if(strcmp(amp_direction,RIGHT_AMP_SELECTION_STR)==0){
+     amp_dir_code = RIGHT_AMP_DIR;
+   }
+   else{
+     fprintf(stderr,"init_cam_readout_time: WARNING: unrecognized amp direction [%s]. Assuming both amp directions\n",
+       amp_direction);
+     fflush(stderr);
+     amp_dir_code = BOTH_AMP_DIR;
+   }
+   
+   if (amp_dir_code == LEFT_AMP_DIR || amp_dir_code == RIGHT_AMP_DIR ){
+     readout_time_sec = SINGLE_AMP_READOUT_TIME_SEC;
+   }
+   else{
+     readout_time_sec = BOTH_AMP_READOUT_TIME_SEC;
+   }
+
+   exp_overhead_hours = EXPOSURE_OVERHEAD_HOURS(readout_time_sec);
+
+   if(verbose){
+     fprintf(stderr,"init_cam_readout_time: readout time [%7.3f] sec and exposure overhead [%7.3f] hours\n",readout_time_sec,exp_overhead_hours);
+     fflush(stderr);
+   }
+
+   return(exp_overhead_hours);
+}
+       
 /* 
 Take an exposure with specified parameters.  The exposure is 
 executed by sending an EXPOSE_COMMAND to the camera
@@ -138,7 +186,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    char *name, double *ut, double *jd,
 		    bool wait_flag, int *exp_error_code, char *exp_mode)
 {
-    char command[MAXBUFSIZE],reply[MAXBUFSIZE];
+    char command[MAXBUFSIZE],reply[MAXBUFSIZE],command_copy[MAXBUFSIZE];
     char filename[STR_BUF_LEN],date_string[STR_BUF_LEN],shutter_string[256],field_description[STR_BUF_LEN];
     char comment_line[STR_BUF_LEN];
     char s[256],code_string[STR_BUF_LEN],ujd_string[256],string[STR_BUF_LEN];
@@ -218,12 +266,13 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
         sprintf(comment_line,"'no comment'");
     }
 
+#if 0
     if(update_fits_header(header,COMMENT_KEYWORD,comment_line)<0){
           fprintf(stderr,"take_exposure: error updating fits header %s:%s\n",
 		COMMENT_KEYWORD,comment_line);
        return(-1);
     }
-
+#endif
     if(verbose1){
       fprintf(stderr,"take_exposure: imprinting fits header\n");
       fflush(stderr);
@@ -311,27 +360,40 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 
     if (! wait_flag){
        if(verbose1){
-         fprintf(stderr,"take_exposure: using a thread to execute the exposure command");
+         fprintf(stderr,"take_exposure: using a thread to execute the exposure command\n");
          fflush(stderr);
        }
 
        pthread_t thread_id;
        Do_Command_Args *command_args;
 
+       strcpy(command_copy,command);
        command_args = (Do_Command_Args *)malloc(sizeof(Do_Command_Args));
-       command_args->command = command;
+       command_args->command = command_copy;
        command_args->reply = reply;
        command_args->timeout = timeout;
        command_args->start_semaphore = &command_start_semaphore;
        command_args->done_semaphore = &command_done_semaphore;
        command_args->command_id = command_id++;
 
+       if(verbose1){
+          fprintf(stderr,"take_exposure: creating do_camera_command_thread with command_args->command = %s\n",
+                 command_args->command);
+          fflush(stderr);
+       }
+
        if(pthread_create(&thread_id,NULL,do_camera_command_thread,\
 		       (void *)command_args)!=0){
          fprintf(stderr,"take_exposure: ERROR creating do_camera_command_thread\n");
          fflush(stderr);
-	 readout_pending = False;
-	 return -1;
+	     readout_pending = False;
+	     return -1;
+       }
+
+       if(verbose1){
+          fprintf(stderr,"take_exposure: success creating do_camera_command_thread, thread_id = %d\n",
+                 thread_id);
+          fflush(stderr);
        }
 
        if(verbose1){
@@ -342,7 +404,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
        // post to command_start_semaphore. This tells the do_camera_command_thread to start
        // executing the exposre command
        if(verbose1){
-	   t = get_ut();
+	       t = get_ut();
            fprintf(stderr,"take_exposure: time %12.6f : posting to start_semaphore\n",t);
            fflush(stderr);
        }
@@ -356,12 +418,12 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
            fflush(stderr);
        }
 
-       *actual_expt = wait_exp_done(expt);
+       *actual_expt = wait_exp_done(expt,SKIP_STATUS_CHECK);
        if (*actual_expt < 0){
           fprintf(stderr,"take_exposure: time %12.6f : error waiting for exposure to end\n",get_ut());
           fflush(stderr);
-	  *actual_expt = 0;
-	  return -1;
+	      *actual_expt = 0;
+	      return -1;
        }
        if(verbose1){
            fprintf(stderr,"take_exposure: time %12.6f : waited  %7.3f sec for exposure time to end\n",
@@ -371,7 +433,7 @@ int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
     }
     else{
        if(verbose1){
-         fprintf(stderr,"take_exposure: executing do_camera_command with wait = True");
+         fprintf(stderr,"take_exposure: executing do_camera_command with wait = True\n");
          fflush(stderr);
        }
 
@@ -417,46 +479,49 @@ double expose_timeout (char *exp_mode, double exp_time, bool wait_flag)
    */
 
    if ( ! wait_flag){
-      t = exp_time + READOUT_TIME_SEC;
+      t = exp_time + readout_time_sec;
    }
    else{
      if (strstr(exp_mode,EXP_MODE_SINGLE)!=NULL){
 
-     /* wait for the exposure, the readout, and the transfer */
-	 t = exp_time + READOUT_TIME_SEC + TRANSFER_TIME_SEC;
-     }
-     /* wait for the exposure and readout only, the transfer 
-      * will be executed later
-     */
-     else if (strstr(exp_mode,EXP_MODE_FIRST)!=NULL){
-	 t = exp_time + READOUT_TIME_SEC;
-     }
-     /* transfer of previous image occurs in parallel with new exposure.
-      *  Wait the longer of:
-      * (a) the exposure and readout times of the next exposure, or
-      * (b) the time to transfer the previous exposure.
-     */
-     else if (strstr(exp_mode,EXP_MODE_NEXT)!=NULL){
-	 if (exp_time + READOUT_TIME_SEC > TRANSFER_TIME_SEC){
-	   t = exp_time;
-	 }
-	 else{
-	   t = TRANSFER_TIME_SEC;
-	 }
+       /* wait for the exposure, the readout, and the transfer */
+       t = exp_time + readout_time_sec + TRANSFER_TIME_SEC;
      }
 
-     /* no new exposure. Only wait for the transfer of the previous
-      * exposure
-     */
+     else if (strstr(exp_mode,EXP_MODE_FIRST)!=NULL){
+       /* wait for the exposure and readout only, the transfer 
+        * will be executed later
+       */
+       t = exp_time + readout_time_sec;
+     }
+
+    else if (strstr(exp_mode,EXP_MODE_NEXT)!=NULL){
+       /* transfer of previous image occurs in parallel with new exposure.
+        *  Wait the longer of:
+        * (a) the exposure and readout times of the next exposure, or
+        * (b) the time to transfer the previous exposure.
+       */
+       if (exp_time + readout_time_sec > TRANSFER_TIME_SEC){
+         t = exp_time;
+       }
+	   else{
+	     t = TRANSFER_TIME_SEC;
+	   }
+     }
+
      else if (strstr(exp_mode,EXP_MODE_LAST)!=NULL){
-	 t = TRANSFER_TIME_SEC;
+       /* no new exposure. Only wait for the transfer of the previous
+        * exposure
+       */
+	   t = TRANSFER_TIME_SEC;
      }
 
      else{
-	 fprintf(stderr,"%s: ERROR: unrecognized exposure mode [%s]\n",
-            "expose_timeout",exp_mode);
-	 t = -1;
-	 return (t);
+       fprintf(stderr,"%s: ERROR: unrecognized exposure mode [%s]\n",
+              "expose_timeout",exp_mode);
+       fflush(stderr);
+       t = -1;
+	   return (t);
      }
    }
 
@@ -530,15 +595,22 @@ int imprint_fits_header(Fits_Header *header)
  *
  * The parallel thread posts to the done_semaphore just before it exits,
  * signifying the exposure command has completed.
+ *
+ * If skip_status_chekl is True, assume exposure is successful and return
+ # after sleepimng for expt sec.
 */
  
-double wait_exp_done(int expt)
+double wait_exp_done(double expt, bool skip_status_check)
 {
-    struct timeval t_val;
-    int t,t_start,t_end,timeout_sec;
+    struct timeval t_val,t_val_start,t_val_end, t_val1, t_val2;
+    double t,t_start,t_end;
+    int timeout_sec;
+    double wait_time,dt;
     double act_expt;
+    useconds_t sleep_time_usec;
 
-    act_expt=0;
+    act_expt=0.0;
+    wait_time = 0.0;
     timeout_sec = expt + 5;
 
     if(verbose1){
@@ -548,61 +620,88 @@ double wait_exp_done(int expt)
          fflush(stderr);
     }
 
-    sleep(expt);
+    /* get start time of wait period */ 
+    gettimeofday(&t_val,NULL);
+    t_start = t_val.tv_sec + (double)(t_val.tv_usec/1000000.0);
+    t_val_start = t_val;
+
+    /* timeout occurs if wait time exceeds t-end */
+    t_end = t_start + timeout_sec;
+
+    sleep_time_usec = expt *1000000;
+    if(verbose1){
+      fprintf(stderr, "wait_exp_done: sleeping %d usec\n",sleep_time_usec);
+      fflush(stderr);
+    }
+    usleep(sleep_time_usec);
 
     /* if the status channel is active, query the camera status to determine whenb
      * the exposure ends. Otherwise, just assume it has ended when the expected 
      * exposure time has been waited */
 
-    if (status_channel_active){
+    if (status_channel_active && ! skip_status_check){
 
-	gettimeofday(&t_val,NULL);
-	int t_start = t_val.tv_sec;
-	int t_end = t_start + timeout_sec;
+        t=t_start;
+        bool done = False;
+        bool error_flag = False;
+  
+        while (t < t_end && ! done && ! error_flag){
+          gettimeofday(&t_val,NULL);
+          t = t_val.tv_sec + (double)(t_val.tv_usec/1000000.0);
 
-	t=t_start;
-	int done = False;
-	while (t < t_end && ! done){
-	  if(update_camera_status(NULL)!=0){
-	    fprintf(stderr,"wait_camera_readout: could not update camera status\n");
-	    done = True;
-	  }
-	  else if (cam_status.state_val[EXPOSING] == ALL_NEGATIVE_VAL){
-	     done = True;
-	  }
-	  else{
-	    fprintf(stderr,"cam_status.state_val[EXPOSING] = %d\n",cam_status.state_val[EXPOSING]);
-	    usleep(100000);
-	    gettimeofday(&t_val,NULL);
-	    t = t_val.tv_sec;
-	  }
-	}
+          if(update_camera_status(NULL)!=0){
+            fprintf(stderr,"wait_exp_done: WARNING: could not update camera status\n");
+            //error_flag = True;
+            //done = True;
+          }
+          gettimeofday(&t_val2,NULL);
+          dt = (t_val2.tv_sec - t_val.tv_sec) + ((double)(t_val2.tv_usec - t_val.tv_usec)/1000000.0);
+          fprintf(stderr,"wait_exp_done: it took %7.3f sec to check status\n", dt);
+         
+          if( cam_status.error){
+            fprintf(stderr,"wait_exp_done: ERROR : camera status error\n");
+            error_flag = True;
+          }
+          else if (cam_status.state_val[EXPOSING] == ALL_NEGATIVE_VAL){
+             done = True;
+          }
+          else{
+            fprintf(stderr,"wait_exp_done: cam_status.state_val[EXPOSING] = %d\n",cam_status.state_val[EXPOSING]);
+            //usleep(100000);
+            //usleep(1000);
+            //gettimeofday(&t_val,NULL);
+            //t = t_val.tv_sec + (double)(t_val.tv_usec/1000000.0);
+          }
+        }
 
-	if (! done ){
-	   if (t < t_end){
-	     fprintf(stderr,"wait_exp_done: time %12.6f : ERROR waiting for exposure to end\n",get_ut());
-	   }
-	   else{
-	     fprintf(stderr,"wait_exp_done: time %12.6f : timeout waiting for exposure to end\n",get_ut());
-	   }
-	   fflush(stderr);
-	}
-	else{
+        gettimeofday(&t_val_end,NULL);
+        wait_time = (t_val_end.tv_sec - t_val_start.tv_sec) + ((double)(t_val_end.tv_usec - t_val_start.tv_usec)/1000000.0);
 
-	   if(verbose1){
-	     fprintf(stderr,
-	       "wait_camera_readout: exposure successfully ended in  %d sec\n",
-		t - t_start);
-	     fflush(stderr);
-	   }
-	}
-	if( (!done) || cam_status.error){
-	    fprintf(stderr,
-		 "wait_exp_done: camera error\n");
-	    print_camera_status(&cam_status,stderr);
-	    fflush(stderr);
-	    act_expt=-1.0;
-	}
+        if (! done ){
+           if (error_flag){
+             fprintf(stderr,"wait_exp_done: time %12.6f : ERROR waiting for exposure to end\n",get_ut());
+             print_camera_status(&cam_status,stderr);
+           }
+           else if (t>t_end){
+             fprintf(stderr,"wait_exp_done: time %12.6f : WARNING timeout waiting for exposure to end\n",get_ut());
+           }
+           else{
+             fprintf(stderr,"wait_exp_done: time %12.6f : WARNING wait loop exited for unknown reason\n",get_ut());
+           }
+           fflush(stderr);
+        }
+        else{
+
+           if(verbose1){
+             fprintf(stderr,
+               "wait_exp_done: exposure successfully ended in  %7.3f sec\n",wait_time);
+             fflush(stderr);
+           }
+        }
+        if( !done ){
+            act_expt=-1.0;
+        }
+        act_expt = wait_time;
     }
     else{
         act_expt = expt;
@@ -692,6 +791,13 @@ void *do_camera_command_thread(void *args){
      id = command_args->command_id;
 
 
+     if(verbose1){
+          fprintf(stderr,"do_camera_command_thread[%d]: time %12.6f : command_args->command = %s\n",
+			  id,get_ut(),command_args->command);
+          fflush(stderr);
+     }
+
+
      *result = 0;
 
 
@@ -715,23 +821,20 @@ void *do_camera_command_thread(void *args){
      /* once the start semaphore posts, execute the command and then post to the
       * done semaphore */
      else{
-	t_start = get_ut();
+	    t_start = get_ut();
         if(verbose1){
           fprintf(stderr,"do_camera_command_thread[%d]: start time %12.6f : sending command [%s] with timeout %d sec\n",
 			  id,t_start,command,timeout_sec);
           fflush(stderr);
         }
         *result = do_camera_command(command,reply, timeout_sec,id,host_name);
-	t_end = get_ut();
+	    t_end = get_ut();
         if(verbose1){
           fprintf(stderr,"do_camera_command_thread[%d]: done time %12.6f : result is [%d] \n",id,t_end,*result);
-	  fflush(stderr);
-	}
-        if(verbose1){
           fprintf(stderr,"do_camera_command_thread[%d]: time %12.6f : posting to done_semaphore\n", id,t_end);
-	  fflush(stderr);
-	}
-	sem_post(done_semaphore);
+	      fflush(stderr);
+	    }
+	    sem_post(done_semaphore);
      }
 
      pthread_exit(result);
@@ -804,22 +907,22 @@ int do_command(char *command, char *reply, int timeout_sec, int port,int id, cha
 int wait_camera_readout(Camera_Status *status)
 {
     struct timeval t1,t2;
-    double t,t_start,t_end,dt;
+    double t,t_start,t_end,dt,t_prev;
     int result=0;
-    int timeout_sec = READOUT_TIME_SEC;
+    int timeout_sec = readout_time_sec;
 
     if (readout_pending){
       gettimeofday(&t1,NULL);
       if(verbose){
-	fprintf(stderr,"wait_camera_readout: time %12.6f : waiting for readout to complete\n",get_ut());
-	fflush(stderr);
+	    fprintf(stderr,"wait_camera_readout: time %12.6f : waiting for readout to complete\n",get_ut());
+	    fflush(stderr);
       }
       /* wait for the done_semphore to post, or else timeout */
 
       t_start = get_ut();
       if(verbose1){
-	fprintf(stderr,"wait_camera_readout: time = %12.6f : waiting for done_semaphore to post with timeout %d\n",t_start,timeout_sec);
-	fflush(stderr);
+	    fprintf(stderr,"wait_camera_readout: time = %12.6f : waiting for done_semaphore to post with timeout %d\n",t_start,timeout_sec);
+	    fflush(stderr);
       }
       //HERE
       /* If a timeout or error occurs while waiting for ther done_semaphore to
@@ -827,23 +930,25 @@ int wait_camera_readout(Camera_Status *status)
       */
       t = t_start*3600.0;
       t_end = t + timeout_sec;
+      t_prev = -1;
       bool done = False;
       while (t < t_end  && !done){
          if ( sem_trywait(&command_done_semaphore) != 0){
-	    if(verbose1){
-	      fprintf(stderr,"wait_camera_readout: time = %12.6f : still waiting for done_semaphore\n",
-			      get_ut());
-	    }
-	    usleep(100000);
-	    t = t + 0.1;
-	 }
-	 else{
-	    done = True;
-	    if(verbose1){
-	      fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",
-			      get_ut());
-	    }
-	 }   
+            if(verbose1 && t > t_prev + 1){
+              fprintf(stderr,"wait_camera_readout: time = %12.6f : waiting for done_semaphore\n",
+                    get_ut());
+              t_prev = t;
+             }
+             usleep(100000);
+             t = t + 0.1;
+         }
+         else{
+            done = True;
+            if(verbose1){
+              fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",
+                      get_ut());
+            }
+         }   
       }
       t_end = get_ut();
       dt = (t_end - t_start) * 3600.0;
@@ -856,18 +961,18 @@ int wait_camera_readout(Camera_Status *status)
        * False and return 0
       */
       else{
-	readout_pending = False;
+    	readout_pending = False;
         if(verbose1){
-     	  fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",t_end);
+     	  //fprintf(stderr,"wait_camera_readout: time = %12.6f : done_semaphore has posted\n",t_end);
      	  fprintf(stderr,"wait_camera_readout: time = %12.6f : waited %7.3f sec for readout to end\n",t_end,dt);
-	  fflush(stderr);
+     	  fflush(stderr);
         }
       }
     }
     else{
        if(verbose1){
-	  fprintf(stderr,"wait_camera_readout: no exposure currently reading out\n");
-	  fflush(stderr);
+	     fprintf(stderr,"wait_camera_readout: no exposure currently reading out\n");
+	     fflush(stderr);
        }
     }
 /*

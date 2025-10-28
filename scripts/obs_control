@@ -1,0 +1,13 @@
+#!/bin/tcsh
+# obs_control
+# D. Rabinowitz Oct 23 2025
+#
+# wrapper for obs_control_script. Just keep asking for new obs_control
+# commands and executing them.
+
+set done = 0
+while ( ! $done )
+ echo "enter command [new|start|stop|pause|unpause|cleanup]. Ctrl-C to exit"
+ set cmd = $<
+ obs_control_script $cmd
+end

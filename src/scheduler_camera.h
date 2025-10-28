@@ -9,8 +9,8 @@
 
 // socket connections to ls4 camera controller (ls4_control)
 #define MACHINE_NAME "pco-nuc"
-#define COMMAND_PORT 5000  
-#define STATUS_PORT 5001  
+#define COMMAND_PORT 6000  
+#define STATUS_PORT 6001  
 
 
 #define COMMAND_DELAY_USEC 100000 /* useconds to wait between commands */
@@ -20,14 +20,25 @@
 #define DONE_REPLY "DONE"
 
 
+// Amp_Direction_Code correspond to the value of the environment varriable
+// "AMP_DIRECTION" which can be "both","left", "right" 
+#define BOTH_AMP_SELECTION_STR "both"
+#define LEFT_AMP_SELECTION_STR "left"
+#define RIGHT_AMP_SELECTION_STR "right"
+
+enum Amp_Direction_Code {BOTH_AMP_DIR,LEFT_AMP_DIR,RIGHT_AMP_DIR};
 
 #define CLEAR_TIME 20 /* seconds required to clear camera  */
 // DEBUG
 #define NUM_CAMERA_CLEARS 0 /* number of clears per camera clear */
 //#define NUM_CAMERA_CLEARS 2 /* number of clears per camera clear */
-#define READOUT_TIME_SEC 40
-#define TRANSFER_TIME_SEC 10
-#define EXPOSURE_OVERHEAD ((READOUT_TIME_SEC + 5.0)/3600.0) /* hours */
+#define BOTH_AMP_READOUT_TIME_SEC 20
+#define SINGLE_AMP_READOUT_TIME_SEC 40
+#define TRANSFER_TIME_SEC 5 
+
+/* macro to calculate exposure overhead in hours given readout time insec */
+
+#define EXPOSURE_OVERHEAD_HOURS(a) ((a+ TRANSFER_TIME_SEC)/3600.0) 
 
 /* Timeout after 10 seconds if expecting quick response from
    a camera command */

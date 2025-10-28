@@ -1,4 +1,4 @@
-/* scheduler.c
+/* sequencer.c
 
    DLR 2007 Mar 3
 

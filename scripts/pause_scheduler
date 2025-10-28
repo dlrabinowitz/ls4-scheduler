@@ -1,0 +1,15 @@
+#!/bin/tcsh
+
+# pause_scheduler
+# scheduler pauses observations but does not exit
+
+# send SIGUSR1 (signal 10) to scheduler
+
+set l = `ps -aef | grep -e "scheduler" | grep -ve "_scheduler" | grep -ve "grep"`
+
+if ( $#l == 0 ) then
+  echo "WARNING: can not pause scheduler. Process is not currently running"
+else
+  slay 10 scheduler
+endif
+

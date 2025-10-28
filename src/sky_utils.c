@@ -1023,15 +1023,16 @@ void load_site(double *longit,double *lat,double *stdz,short *use_dst,
 		fflush(stdout);
 	}
 	else if (obs_code[0] == 'f') {
-		strcpy(site_name, "Fake Site");
-		strcpy(zone_name, "Fake Location");
-		*zabr = 'F';
-		*longit = 16.7153;
-		*stdz = 16.;
+		strcpy(site_name, "FAKE_ESO_SCHMIDT");
+		strcpy(zone_name, "Chilean");
+		*zabr = 'C';
+		*use_dst = -1;
+		*longit = 4.7153;
+		*stdz = 4.;
 		*lat = -29.257;
 		*elevsea = 2347.;
 		*elev = 2347.; /* for ocean horizon, not Andes! */
-		printf("\n\n** Will use daylght time, Fakedate conventions. \n\n");
+		printf("\n\n** Will use daylght time, Chilean date conventions. \n\n");
 		fflush(stdout);
 	}
 	else if (obs_code[0] == 'b') {
@@ -2815,21 +2816,9 @@ void find_dst_bounds(yr,stdz,use_dst,jdb,jde)
 		*jde = date_to_jd(trial) + (stdz - 1.)/24.;
 	}
 	else if (use_dst == -1) {  /* Chilean, for CTIO, etc.  */
-#ifdef EARTHQUAKE_DST_ON
-		// In 2010 Chile changed end date of Daylight Savings Time
-		// to Apr 4, 0h in order to aid Earthquake recovery.
 		trial.y = yr;
-		trial.mo = 3;
-		trial.d = 4; 
-		trial.h = 0;
-		trial.mn = 0;
-		trial.s = 0;
-		*jdb = date_to_jd(trial) + (stdz - 1.)/24.;
-#else
-	   /* off daylight 2nd Sun in March, onto daylight 2nd Sun in October */
-		trial.y = yr;
-		trial.mo = 3;
-		trial.d = 8;  /* earliest possible 2nd Sunday */
+		trial.mo = 4;
+		trial.d = 1;  /* earliest possible 2nd Sunday */
 		trial.h = 2;
 		trial.mn = 0;
 		trial.s = 0;
@@ -2840,9 +2829,8 @@ void find_dst_bounds(yr,stdz,use_dst,jdb,jde)
 		*jdb = date_to_jd(trial) + (stdz - 1.)/24.;
 			/* note jdb is beginning of STANDARD time in south,
 				hence use stdz - 1. */
-#endif
-		trial.mo = 10;
-		trial.d = 8;
+		trial.mo = 9;
+		trial.d = 7;
 		while(day_of_week(date_to_jd(trial)) != 6) {
 			trial.d++;
 		}

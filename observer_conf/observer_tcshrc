@@ -1,3 +1,6 @@
 setenv LS4_ROOT /home/observer
-if ( ?$LS4_ROOT/.login ) source $LS4_ROOT/.login
+if ( ! $?prompt) setenv prompt " %U%m%u:%B%~%b%#"
+if ( -e $LS4_ROOT/.login ) source $LS4_ROOT/.login
+#echo $PYTHON_ENV
+source $PYTHON_VENV/bin/activate.csh
 setenv PATH ".":"$LS4_ROOT/bin":"$LS4_ROOT/scheduler/scripts":"$PATH"

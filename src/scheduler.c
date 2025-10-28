@@ -26,7 +26,17 @@
 
    Set FAKE_RUN=1 (scheduler.h) to simulate observations, with 
    optional name of weather file on command line (weather file 
-   lists when dome is open and closed during the night).
+   lists when dome is open and closed during the night). No call
+   is made to the telescope or camera servers (questctl and ls4_control).
+
+   TO run a pseudo realtime-time test of the code, set environment 
+   `variables "FAKE_TELESCOPE", FAKE_CAMERA, or "FAKE_OBS" to 1 
+   (see /home/observer/.login). These settings allow
+   real calls to the telescope and/or camera servers, but responses from
+   the devices are simulated. No hardware is actually used.
+
+   To artificially advance the current UT to a later time (e.g. evening
+   hours), set FAKE_UT_OFFSET accordingly (default = 0.0 h).
   
 
    syntax: scheduler sequence_file yyyy mm dd verbose_flag
@@ -59,11 +69,28 @@
 
 // do not wait for readout of exposure before moving to next field.
 
-#define WAIT_FLAG False
+// WAIT_FLAG = True forces scheduler to wait for complete exposure.
+// readout, and transfer before starting a new exposure.
+//
+// WAIT_FLAG = False allows the scheduler to move to a new telescope
+// position and prepare header info while the exposure is being read
+// out (and possibly transfered). The scheduler will wait for the
+// exposure to be completely read out before starting a new exposure.
+
+
+// Try WAIT_FLAG True instead of False because of coding error
+#define WAIT_FLAG True 
+
+//#define WAIT_FLAG False
+
+
 //#define DEBUG 1
 
 #define LOOP_WAIT_SEC 10 /* seconds to wait between loops if no
                field selected */
+
+#define WAIT_FOR_DOME_OPEN 0 /* don't need to have dome open to observer */
+
 int verbose=0;
 int verbose1 = 0; /* set to 1 for very verbose */
 int pause_flag=0;
@@ -81,6 +108,8 @@ char *filter_name_ptr=0;
 
 // global
 char *host_name=NULL;
+double ut_offset=0.0;
+double exp_overhead_hours = 0.0;
 
 // NOTE: each element of selection string must correspond to an element of Selection_Code 
 // defined in scheduler.h
@@ -120,6 +149,7 @@ int main(int argc, char **argv)
     char code_string[1024];
     int selection_code;
     char site_name[1024];
+    char amp_dir_str[1024];
 #if FAKE_RUN
     FILE *weather_input;
 #endif
@@ -133,6 +163,21 @@ int main(int argc, char **argv)
       fprintf(stderr,"WARNING: environment variable SITE_NAME is not set. Using DEFAULT\n");
       strcpy(site.site_name,"DEFAULT");
     } 
+
+    if (getenv("FAKE_UT_OFFSET") != NULL){
+        sscanf(getenv("FAKE_UT_OFFSET"),"%lf", &ut_offset);
+    }
+    else{
+        ut_offset = 0.0;
+    }
+
+    if (getenv("CCD_AMP_SELECTION") != NULL){
+        strcpy(amp_dir_str,getenv("CCD_AMP_SELECTION"));
+    }
+    else{
+        strcpy(amp_dir_str,BOTH_AMP_SELECTION_STR);
+    }
+    exp_overhead_hours = init_cam_readout_time(amp_dir_str);
 
     init_status_names();
 
@@ -268,8 +313,8 @@ int main(int argc, char **argv)
 
     /* initialize site parameters for DEFAULT observatory (ESO La Silla) */
 
-    //strcpy(site.site_name,"DEFAULT"); /* DEFAULT assigned to ESO La Silla */
-    strcpy(site.site_name,"Fake"); /* Fake Site */
+    strcpy(site.site_name,"DEFAULT"); /* DEFAULT assigned to ESO La Silla */
+    //strcpy(site.site_name,"Fake"); /* Fake Site */
     if(verbose){
       fprintf(stderr,"loading info for site  %s\n",site.site_name);
     }
@@ -283,6 +328,7 @@ int main(int argc, char **argv)
       fprintf(stderr,"# elevsea: %10.6f\n",site.elevsea);
       fprintf(stderr,"# elev: %10.6f\n",site.elev);
       fprintf(stderr,"# horiz: %10.6f\n",site.horiz);
+      fprintf(stderr,"# ut_offset: %10.6f\n", ut_offset);
     }
 
 
@@ -310,6 +356,7 @@ int main(int argc, char **argv)
     /* initialize tonight */
     init_night(date,&nt,&site,1);
 
+    
     if(verbose){
        fprintf(stderr,"# ut sunset : %10.6f\n",nt.ut_sunset); 
        fprintf(stderr,"# ut start  : %10.6f\n",nt.ut_start); 
@@ -345,9 +392,10 @@ int main(int argc, char **argv)
     ut=get_ut();
     jd=get_jd();
     if(verbose){
-      fprintf(stderr,"current ut,jd,ut_offset: %12.6f %12.6f %12.6f\n", ut,jd,UT_OFFSET );
+      fprintf(stderr,"current ut,jd: %12.6f %12.6f \n", ut,jd);
     }
 
+#if WAIT_SUNDOWN
     while(jd<nt.jd_sunset){
        fprintf(stderr,
         "# UT: %9.5f UT_Start: %9.5f jd: %12.6f jd_sunset : %12.6fwaiting for sunset ...\n",
@@ -372,7 +420,7 @@ int main(int argc, char **argv)
         "# UT: %9.5f UT_Start: %9.5f Sun is down. Starting observing program\n",
         ut,nt.ut_start);
     fflush(stderr);
-
+#endif
 
     /* Make sure the camera is responding. Exit if not */
 
@@ -617,10 +665,10 @@ int main(int argc, char **argv)
 
 
          else if(update_telescope_status(&tel_status)!=0){
-        fprintf(stderr,
-        "# UT : %9.6f Can't update telescope status \n",ut);
-        bad_weather=1;
-        telescope_ready=0;
+            fprintf(stderr,
+            "# UT : %9.6f Can't update telescope status \n",ut);
+            bad_weather=1;
+            telescope_ready=0;
          }
 
          else{
@@ -628,6 +676,9 @@ int main(int argc, char **argv)
          if(verbose)print_telescope_status(&tel_status,stderr);
          if(tel_status.dome_status!=1){
               bad_weather=1;
+              if ( WAIT_FOR_DOME_OPEN == 0){
+               bad_weather = 0;
+              }
          }
          else {
               stow_flag=0; /* once dome is open, assume telescope 
@@ -902,13 +953,18 @@ int main(int argc, char **argv)
             /* reset offset_done flag to 0 if this is a new offset sequence */
             else if(offset_done&&sequence[i].shutter==OFFSET_CODE)offset_done=0;
 
+            // DEBUG
+            strcpy(exp_mode,EXP_MODE_SINGLE);
+            /*
             if (first_exposure){
-            strcpy(exp_mode,EXP_MODE_FIRST);
-            first_exposure = False;
+              strcpy(exp_mode,EXP_MODE_FIRST);
+              first_exposure = False;
             }
             else{
-            strcpy(exp_mode,EXP_MODE_NEXT);
+              strcpy(exp_mode,EXP_MODE_NEXT);
             }
+            */
+            
             if(observe_next_field(sequence,i,i_prev,jd,&dt,&nt,WAIT_FLAG,
             log_obs_out,&tel_status,&cam_status,&fits_header,exp_mode)!=0){
                fprintf(stderr,"ERROR observing field %d\n",i);
@@ -1414,6 +1470,8 @@ int get_day_of_year(struct date_time *date)
 int init_night(struct date_time date, Night_Times *nt, 
                      Site_Params *site,int print_flag)
 {
+    double ut, jd, lst;
+    Telescope_Status tel_status;
 
     /* initialize night_time values */
     print_tonight(date,site->lat,site->longit,site->elevsea,site->elev,site->horiz,
@@ -1422,23 +1480,45 @@ int init_night(struct date_time date, Night_Times *nt,
 
 
 
-    if (USE_12DEG_START){
+    if( USE_ANYTIME_START){
+      if (print_flag ){
+         fprintf(stderr,"allowing observations all day\n");
+      }
+      if(update_telescope_status(&tel_status)!=0){
+        fprintf(stderr,
+           "Telescope Status not yet available, Can not determine pointing constraints\n");
+      }
+      else{
+        print_telescope_status(&tel_status,stderr);
+      }
+
+      lst = tel_status.lst;
+      jd = get_jd();
+      ut=get_ut();
+      nt->ut_start = ut;
+      nt->ut_end = ut + 24.0;
+      nt->lst_start=lst;
+      nt->lst_end=lst+24.0;
+      nt->jd_start=jd;
+      nt->jd_end=jd + 1.0;
+    }
+    else if (USE_12DEG_START){
       if (print_flag ){
          fprintf(stderr,"using 12 deg twilight + %12.6f h for start time\n",
             STARTUP_TIME);
-     }
+      }
       nt->ut_start=nt->ut_evening12+STARTUP_TIME;
       nt->ut_end=nt->ut_morning12-MIN_EXECUTION_TIME;
       nt->lst_start=nt->lst_evening12+STARTUP_TIME;
       nt->lst_end=nt->lst_morning12-MIN_EXECUTION_TIME;
       nt->jd_start=nt->jd_evening12+(STARTUP_TIME/24.0);
       nt->jd_end=nt->jd_morning12-(MIN_EXECUTION_TIME/24.0);
-       }
+    }
     else {
       if (print_flag ){
          fprintf(stderr,"using 18 deg twilight + %12.6f h for start time\n",
             STARTUP_TIME);
-     }
+      }
       nt->ut_start=nt->ut_evening18+STARTUP_TIME;
       nt->ut_end=nt->ut_morning18-MIN_EXECUTION_TIME;
       nt->lst_start=nt->lst_evening18+STARTUP_TIME;
@@ -1685,7 +1765,7 @@ fprintf(stderr,"HA = %10.6f,  expt = %10.6f,  LONG_EXPTIME = %10.6f\n",
 #if FAKE_RUN
 
   for(n=1;n<=num_exposures;n++){
-    *dt=expt+EXPOSURE_OVERHEAD;
+    *dt=expt+exp_overhead_hours;
     actual_expt=expt;
     ha=lst-f->ra;
     if(f->shutter==FOCUS_CODE)*dt=*dt+FOCUS_OVERHEAD;
@@ -1789,7 +1869,7 @@ fprintf(stderr,"HA = %10.6f,  expt = %10.6f,  LONG_EXPTIME = %10.6f\n",
     lst=lst+(*dt);
     }
   }
-  *dt=num_exposures*(expt+EXPOSURE_OVERHEAD);
+  *dt=num_exposures*(expt+exp_overhead_hours);
 #else
 
     if(f->shutter!=DARK_CODE&&f->shutter!=DOME_FLAT_CODE){ 
@@ -1885,29 +1965,28 @@ fprintf(stderr,"HA = %10.6f,  expt = %10.6f,  LONG_EXPTIME = %10.6f\n",
 
        focus=focus_start+focus_increment*f->n_done;
        if(focus<MIN_FOCUS||focus>MAX_FOCUS){
-     fprintf(stderr,
-        "observe_next_field: intended focus setting out of range: %8.5f\n",
-        focus);
-     return(-1);
+          fprintf(stderr,
+            "observe_next_field: intended focus setting out of range: %8.5f\n",
+            focus);
+          return(-1);
        }
 
-       fprintf(stderr,"# setting focus to %8.5f mm\n",
-        focus);
+       fprintf(stderr,"# setting focus to %8.5f mm\n", focus);
        fflush(stderr);
 
        if(set_telescope_focus(focus)!=0){
-       fprintf(stderr,"observe_next_field: unable to set telescope focus\n");
-       return(-1);
+         printf(stderr,"observe_next_field: unable to set telescope focus\n");
+         return(-1);
        }
     
        if(update_telescope_status(tel_status)!=0){
-       fprintf(stderr,"observe_next_field: could not update telescope status\n");
-       return(-1);
+         fprintf(stderr,"observe_next_field: could not update telescope status\n");
+         return(-1);
        }
       
        if(verbose){
-      fprintf(stderr,"observe_next_field: focus set to %8.5f mm\n",
-        tel_status->focus);
+        fprintf(stderr,"observe_next_field: focus set to %8.5f mm\n",
+          tel_status->focus);
        }
 
     }
@@ -2358,93 +2437,93 @@ int get_next_field(Field *sequence,int num_fields, int i_prev,
      n_late_must_do=0;
 
      if(verbose){  
-    fprintf(stderr,"get_next_field: updating field status\n");
+      fprintf(stderr,"get_next_field: updating field status\n");
      }
 
      for(i=0;i<num_fields;i++){
-     f=sequence+i;
+       f=sequence+i;
 
-     update_field_status(f,jd,bad_weather);
-     if(verbose1){
-       get_field_status_string(f,field_status);
-       fprintf(stderr,"field %d status %s\n",i,field_status);
-     }
+       update_field_status(f,jd,bad_weather);
+       if(verbose1){
+         get_field_status_string(f,field_status);
+         fprintf(stderr,"field %d status %s\n",i,field_status);
+       }
 
 #if 1
-     /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
-        value of n_left */
+       /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
+          value of n_left */
 
-     if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
-        n_ready_must_do++;
+       if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
+          n_ready_must_do++;
 
-        n_left=f->n_required-f->n_done;
-        
-        if(n_left<n_left_min_must_do){
-         n_left_min_must_do=n_left;
-        }
+          n_left=f->n_required-f->n_done;
+          
+          if(n_left<n_left_min_must_do){
+           n_left_min_must_do=n_left;
+          }
 
-     }
+       }
 
-     /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
-        field).  Return field index */
+       /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
+          field).  Return field index */
 
-     else if(f->status==DO_NOW_STATUS){
-        n_do_now++;
-        if(i_min_do_now==-1)i_min_do_now=i;
-        if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
-        if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
-          f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
-        /*return(i);*/
-     }
+       else if(f->status==DO_NOW_STATUS){
+          n_do_now++;
+          if(i_min_do_now==-1)i_min_do_now=i;
+          if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
+          if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
+            f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
+          /*return(i);*/
+       }
 
 #else
-     /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
-        field).  Return field index */
+       /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
+          field).  Return field index */
 
-     if(f->status==DO_NOW_STATUS){
-        n_do_now++;
-        if(i_min_do_now==-1)i_min_do_now=i;
-        if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
-        if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
-          f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
-        /*return(i);*/
-     }
+       if(f->status==DO_NOW_STATUS){
+          n_do_now++;
+          if(i_min_do_now==-1)i_min_do_now=i;
+          if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
+          if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
+            f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
+          /*return(i);*/
+       }
 
-     /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
-        value of n_left */
+       /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
+          value of n_left */
 
-     else if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
-        n_ready_must_do++;
+       else if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
+          n_ready_must_do++;
 
-        n_left=f->n_required-f->n_done;
-        
-        if(n_left<n_left_min_must_do){
-         n_left_min_must_do=n_left;
-        }
+          n_left=f->n_required-f->n_done;
+          
+          if(n_left<n_left_min_must_do){
+           n_left_min_must_do=n_left;
+          }
 
-     }
+       }
 #endif
 
-     /* for any other field with READY_STATUS, increment the count and update minimum
-        value of n_left */
+       /* for any other field with READY_STATUS, increment the count and update minimum
+          value of n_left */
 
-     else if (f->status==READY_STATUS){
-        n_ready++;
+       else if (f->status==READY_STATUS){
+          n_ready++;
 
-        n_left=f->n_required-f->n_done;
-        
-        if(n_left<n_left_min){
-         n_left_min=n_left;
-        }
+          n_left=f->n_required-f->n_done;
+          
+          if(n_left<n_left_min){
+           n_left_min=n_left;
+          }
 
-     }
+       }
 
-     /* Also count fields with TOO_LATE_STATUS */
+       /* Also count fields with TOO_LATE_STATUS */
 
-     else if (f->status==TOO_LATE_STATUS){
-        n_late++;
-        if(f->survey_code==MUSTDO_SURVEY_CODE)n_late_must_do++;
-     }
+       else if (f->status==TOO_LATE_STATUS){
+          n_late++;
+          if(f->survey_code==MUSTDO_SURVEY_CODE)n_late_must_do++;
+       }
 
      } //for(i=0;i<num_fields;i++){
 
@@ -2839,17 +2918,17 @@ int update_field_status(Field *f, double jd, int bad_weather)
 #else
       else if (f->jd_next-jd>f->interval/(2.0*24.0)){
 #endif
-     f->status=NOT_DOABLE_STATUS;
-     return(NOT_DOABLE_STATUS);
+        f->status=NOT_DOABLE_STATUS;
+        return(NOT_DOABLE_STATUS);
       }
 
 
       /* darks  and domes that  are ready to
-     observe get highest priority (DO_NOW_STATUS) */
+      observe get highest priority (DO_NOW_STATUS) */
 
       else if (f->shutter==DARK_CODE||f->shutter==DOME_FLAT_CODE){
-    f->status=DO_NOW_STATUS;
-    return(DO_NOW_STATUS);
+        f->status=DO_NOW_STATUS;
+        return(DO_NOW_STATUS);
       }
 
 

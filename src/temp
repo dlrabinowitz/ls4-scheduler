@@ -1,0 +1,57 @@
+void oprntf(char *fmt, ...)
+void ungetch(c) /* push character back on input */
+void dec_to_bab (deci,bab)
+void put_coords(deci, precision)
+void load_site(double *longit,double *lat,double *stdz,short *use_dst,
+void min_max_alt(lat,dec,min,max)
+void caldat(jdin,date,dow)
+void print_day(d)
+void print_all(double jdin)
+	/* going through the rigamarole to avoid 60's */
+void print_current(date,night_date,enter_ut)
+void print_calendar(jdin,dow)
+void print_time1(jdin,prec)
+void print_time(jdin,prec)
+void lpmoon(jd,lat,sid,ra,dec,dist)
+void lpsun(jd,ra,dec)
+void eclrot(jd, x, y, z)
+void geocent(geolong,geolat,height,x_geo,y_geo,z_geo)
+void accumoon(jd,geolat,lst,elevsea,geora,geodec,geodist,
+void flmoon(n,nph,jdout)
+void print_phase(jd)
+void accusun(jd,lst,geolat,ra,dec,dist,topora,topodec,x,y,z)
+void find_dst_bounds(yr,stdz,use_dst,jdb,jde)
+void print_tz(jd,use,jdb,jde,zabr)
+void xyz_cel(x, y, z, r, d)
+void precrot(rorig, dorig, orig_epoch, final_epoch, rf, df)
+void mass_precess() {
+void galact(ra,dec,epoch,glong,glat)
+void eclipt(ra,dec,epoch,jd,curep,eclong,eclat)
+void comp_el(jd)
+void planetxyz(p, jd, x, y, z)
+void planetvel(p, jd, vx, vy, vz)
+void xyz2000(jd,x,y,z)
+void earthview(x, y, z, i, ra, dec)
+void pposns(jd,lat,sid,print_option,planra,plandec)
+void barycor(jd,x,y,z,xdot,ydot,zdot)
+void helcor(jd,ra,dec,ha,lat,elevsea,tcor,vcor)
+void solecl(sun_moon,distmoon,distsun)
+void planet_alert(jd,ra,dec,tolerance)
+void print_tonight(struct date_time date, double lat, double longit,
+void print_circumstances(objra,objdec,objepoch,jd,curep,
+	/* test size of sec z to avoid overflowing space provided */
+void hourly_airmass(date,stdz,lat,longit,horiz,use_dst,objra,objdec,
+void print_params(date,enter_ut,night_date,stdz,lat,longit,site_name,
+void print_menu()
+void print_tutorial()
+void print_examples() {
+void print_accuracy()
+void print_legalities()
+void ephemgen(ra, dec, ep, lat, longit)
+void print_air(secz,prec)
+void print_ha_air(ha,secz,prec1,prec2)
+void obs_season(ra, dec, epoch, lat, longit)
+void indexx(n,arrin,indx)
+void type_list(date, use_dst, enter_ut, night_date, stdz,
+void set_zenith(struct date_time date, short use_dst, short enter_ut, 
+void printephase(date, use_dst, enter_ut, night_date, stdz, lat,

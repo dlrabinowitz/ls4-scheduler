@@ -6,19 +6,77 @@
 #
 # syntax: restart_ccp [data_path] [stop (optional)]
 #
+# Procedure:
+#  1. check is ccp is already running. If so, try stop it.
+#  2. if stop argument is chosen, exit.
+#  3. restart ccp
+#  4. if ccp does not start with START_WAIT_TIME sec, exit with error message.
+#  4. if ccp does not return idle status after IDLE_WAIT_TIME sec, exit with error message
+#
+#     
+#
 #
 unalias rm
 source /home/observer/.login
+set TEMP_FILE = "/tmp/restart.tmp"
+if ( -e $TEMP_FILE ) rm $TEMP_FILE
+touch $TEMP_FILE
 #
+# maximum time to wait for ccp to become idle
+set IDLE_WAIT_TIME = 30
+if ( $CCD_AMP_SELECTION != "both" && $CCD_AMP_SELECTION != "BOTH" ) then
+  @ IDLE_WAIT_TIME = $IDLE_WAIT_TIME * 2
+endif
+set START_WAIT_TIME = 10
 
-#set CCP_LOG = "/home/observer/logs/ccp.log"
-#
-# if ccp is already running, it will be aborted. Wait up to MAX_ABORT_WAIT_SEC
-# for ccp to abort.
-set MAX_ABORT_WAIT_SEC = 25
 
-# After re-launching ccp, wait up to MAX_START_WAIT_SEC for ccp to start
-set MAX_START_WAIT_SEC = 25
+# status returned by ccpstatus:
+# {'ready': True,
+#'state': 'started',
+#'error': False,
+#'comment': 'started',
+# 'date': '2025-10-21T17:36:31.00',
+# 'NOSTATUS': '0000',
+# 'UNKNOWN': '0000',
+# 'IDLE': '1111',
+# 'EXPOSING': '0000',
+# 'READOUT_PENDING': '0000',
+# 'READING': '0000',
+# 'FETCHING': '0000',
+# 'FLUSHING': '0000',
+# 'ERASING': '0000',
+# 'PURGING': '0000',
+# 'AUTOCLEAR': '0000',
+# 'AUTOFLUSH': '0000',
+# 'POWERON': '1111',
+#'POWEROFF': '0000',
+# 'POWERBAD': '0000',
+# 'FETCH_PENDING': '0000',
+# 'ERROR': '0000',
+# 'ACTIVE': '0000',
+# 'ERRORED': '0000',
+# 'cmd_error':False,
+# 'cmd_error_msg':'False', 
+# 'cmd_command':'', 
+# 'cmd_arg_value_list':'', 
+# 'cmd_reply':''
+# }
+
+set ccp_status = ""
+set idle_ccp_status = ""
+set reading_ccp_status = ""
+set fetching_ccp_status = ""
+
+alias is_running 'ps -aef | grep -e "run_ccp" | grep -ve "tail" | grep -ve "grep" | wc -l'
+#alias get_status 'set ccp_status = `ccpstatus`'
+alias get_status 'ccpstatus >! $TEMP_FILE; set ccp_status = `cat $TEMP_FILE`'
+alias good_status 'grep DONE "$ccp_status" |& wc -l'
+
+alias  is_exposing 'grep "EXPOSING" $TEMP_FILE |& grep -e "1" | wc -l'
+alias  is_reading 'grep "READING" $TEMP_FILE |& grep -e "1" | wc -l'
+alias  is_idle  'grep "IDLE" $TEMP_FILE |& grep -e "1111" | wc -l'
+alias  is_fetching 'grep "FETCHING" $TEMP_FILE |& grep -e "1" | wc -l'
+
 #
 set stop_flag = 0
 set data_path = $QUESTNEATDATADIR/test
@@ -40,104 +98,160 @@ else
      endif
   endif
 endif
-#
-## copy and existing questmgr script to ~guest
-#echo "executing copy_script" 
-#copy_script
-#
-# Execute an abort for ccp, even if it is not currently running.
-$LS4_CONTROL_ROOT/scripts/abort_server.bash
 
-# Check if ccp is still running
-set is_running = `ps -aef | grep -e "ccp" | grep -ve "tail" | grep -ve "grep" | wc -l`
+# if previously instance of ccp is running:
+#   if ccp returns good status:
+#      if ccp is idle:
+#         execute "stopccp" (defined in ~/.login. This sends "shutdown" to ccp)
+#      else if ccp is exposing:
+#         abort exposure (using abort_exposure.bash in ~/ls4_control/scripts)
+#         wait 3 sec
+#      else:
+#         wait up to IDLE_WAIT_TIME sec for ccp to become idle.
+#         if ccp is still not idle, execute "abort_server.bash".
+#         wait 3 sec
+#      endif
+#   if ccp is still running:
+#      slay run_ccp ( this is the python script that runs the ccp server)
+#      if ccp is still running:
+#         exit with error messager
+#      endif
+#      report success stopping ccp
+#   endif
+  
 
-# If ccp is still running, keep checking every 5 sec. Give up after MAX_ABORT_WAIT_SEC.
-set wait_time = 0
-while ( $is_running > 0 && $wait_time < $MAX_ABORT_WAIT_SEC ) 
-     sleep 5
-     @ wait_time = $wait_time + 5
-     set is_running = `ps -aef | grep -e "run_ccp" | grep -ve "tail" | grep -ve "grep" | wc -l`
-     if ( $is_running > 0 ) then
-        echo "previous instance of ccp still running after waiting $wait_time sec " 
-     endif
-end
+echo "checking ccp status"
 
-if ( $is_running > 0 ) then
-   echo "ERROR: ccp still running $wait_time sec after abort. Exitting" 
-   exit
-else
-   echo "ccp successfully stopped."
+if ( `is_running` ) then
+  echo "previous instance of ccp is still running. Will try to stop this instance."
+  echo "getting ccp status"
+  get_status
+  if ( `good_status` == 0 ) then
+     echo "unable to get ccp status"
+  else if ( `good_status` ) then
+    echo "status is: [ $ccp_status ]"
+    if ( `is_idle` ) then
+      echo "ccp is idle. Stopping ccp"
+      stopccp
+      sleep 3
+    else if ( `is_exposing` ) then
+      echo "ccp is exposing. Aborting exposure"
+      $LS4_CONTROL_ROOT/scripts/abort_exposure.bash
+      echo "waiting 3 sec"
+      sleep 3
+      echo "stopping ccp"
+      stopccp
+      sleep 5
+    else
+      echo "ccp is busy. Waiting up to $IDLE_WAIT_TIME sec for camera to become idle"
+      set done = 0
+      set t = 0
+      while ( ( ! $done )  && ( $t < $IDLE_WAIT_TIME ) )
+          get_status
+          if ( `good_status` == 0 ) then
+            sleep 1
+            @ t = $t + 1
+            if ( `is_idle` ) then 
+              set done = 1
+            else
+              echo $t "still waiting for ccp to become idle..."
+            endif
+          else
+              echo $t "bad status while waiting for ccp to become idle."
+              break
+          endif
+      end
+
+      if ( ! $done ) then
+        echo "timeout waiting for ccp to become idle"
+        echo "aborting ccp."
+        $LS4_CONTROL_ROOT/scripts/abort_server.bash
+        sleep 3
+      endif
+
+    endif
+
+    if ( `is_running` ) then
+      echo "unable to stop or abort previous instance of ccp."
+      get_status
+      echo "status is [ $ccp_status ]"
+      echo "Slaying ccp"
+      slay run_ccp
+      if ( `is_running` ) then
+        echo "ERROR: unable to stop previous instance of ccp. Exitting"
+        exit
+      endif
+    endif
+
+    echo "success stopping previous instance of ccp."
+  endif
+
 endif
 
 if ( $stop_flag ) exit
 
-# restart ccp. Note, other default options specified in start_ccp.bash
+# restart ccp. Note, other default options specified in start_ccp.basha
+#
+# echo start_ccp.bash with appropriate options.
+# If ccp to does start up after  START_WAIT_TIME sec then exit.
+# Wait up to IDLE_WAIT_TIME sec for ccp to return idle status.
+# Exit i
+
 echo "restarting ccp" 
+
 if ( -e $CCP_LOG ) rm $CCP_LOG
-if ( $FAKE_OBS ) then
-  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -fake -log_level $CCP_LOG_LEVEL  -log $CCP_LOG  -data_path $data_path
+if ( $FAKE_CAMERA ) then
+  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -fake -log_level $CCP_LOG_LEVEL  -log $CCP_LOG  -data_path $data_path -$CCD_AMP_SELECTION
 else
-  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -log_level $CCP_LOG_LEVEL  -log $CCP_LOG  -data_path $data_path
+  $LS4_CONTROL_ROOT/scripts/start_ccp.bash -log_level $CCP_LOG_LEVEL  -log $CCP_LOG  -data_path $data_path -$CCD_AMP_SELECTION     
 endif
 
-echo "waiting up to 25 seconds for ccp to start" 
-# Check if ccp is running
-set is_running = `ps -aef | grep -e "ccp" | grep -ve "tail" | grep -ve "grep" | wc -l`
+echo "waiting up to $START_WAIT_TIME sec for ccp to start" 
 
-# If ccp is not running, keep checking every 5 sec. Give up after MAX_START_WAIT_SEC.
+# Check if ccp is running
+set running = `is_running`
+
+# If ccp is not running, keep checking every 1 sec. Give up after START_WAIT_TIME.
 set wait_time = 0
-while ( $is_running == 0 && $wait_time < $MAX_START_WAIT_SEC ) 
-     sleep 5
-     @ wait_time = $wait_time + 5
-     set is_running = `ps -aef | grep -e "ccp" | grep -ve "tail" | grep -ve "grep" | wc -l`
-     if ( $is_running == 0 ) then
-        echo "ccp not started after waiting $wait_time sec " 
+while ( ( ! $running )  && $wait_time < $START_WAIT_TIME ) 
+     set running = `is_running`
+     if ( ! $running ) then
+        echo $wait_time " still waiting for ccp to start..."
+        sleep 1
+        @ wait_time = $wait_time + 1
      endif
 end
 
-if ( $is_running == 0 ) then
-   echo "ERROR: ccp still running $wait_time sec after abort. Exitting" 
+if ( ! $running ) then
+   echo "ERROR: ccp still not running after waiting $wait_time sec . Exitting" 
    exit
 else
-   echo "ccp is running " 
+   echo "ccp is now running " 
 endif
 
-echo "checking ccp status" 
-
-set status_temp = "/tmp/ccp_status.tmp"
-if ( -e $status_temp ) rm $status_temp
+echo "Waiting for ccp to configure controllers..."
 
 set wait_time = 0
-set started = 0
-while ( $wait_time < 25 && $started == 0 )
-  echo "echo status  | netcat -N $CCP_HOST $CCP_PORT >>& $status_temp " 
-  echo "status"  | netcat -N $CCP_HOST $CCP_PORT >>& $status_temp
-  if ( -e $status_temp ) cat $status_temp 
-
-  set n = `cat $status_temp | wc -l `
-  if ( $n > 0 ) then
-    set l = `grep -e "DONE" $status_temp | wc -l `
-  else 
-    set l = 0
-  endif 
-  if (  $n == 0 ) then
-    echo "wait_time: $wait_time no status returned  yet" 
-  else if ( $l == 0 ) then
-    echo "wait_time: $wait_time bad status: " 
-    cat $status_temp 
-  else
-    echo "wait_time: $wait_time ccp status is ok" 
-    set started = 1
+set started = `is_idle`
+while ( $wait_time < $IDLE_WAIT_TIME && $started == 0 )
+  get_status
+  set started = `is_idle`
+  if (  ! $started ) then
+     echo $wait_time " Still waiting for ccp to configure controllers..."
+     sleep 3
+     @ wait_time = $wait_time + 3
   endif
-  sleep 5
-  @ wait_time = $wait_time + 5
 end
 
-if ( $started == 0 ) then
-   echo "bad ccp status. Exitting"
+if ( ! $started ) then
+   
+   echo "timeout waiting for ccp to started."
+   echo "ccp_status: [ $ccp_status ]"
+   ecco "Exitting"
    exit
 else
-   echo "good  ccp status"
+   echo "ccp has successfully started."
+   echo "ccp_status: $ccp_status"
 endif
 #
 echo "done with restart_ccp" 

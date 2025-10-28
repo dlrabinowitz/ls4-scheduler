@@ -24,7 +24,9 @@
 
 #define SNE_SHIFT 0 /* set to 1 to shift paired fields by 1.0 deg, 0 for 0.5 deg */
 #define FAKE_RUN 0 /* set to 1 for simulated obs */
-#define UT_OFFSET 0.00 /* ut offset for debugging */
+#define WAIT_SUNDOWN 0 /* set to 1 to wait for sundown to observer */
+// change to environment variable
+//#define UT_OFFSET 0.00 /* ut offset for debugging */
 #define DEEP_DITHER_ON 0 /* turn on dithering for deep coadds */
 #
 #define USE_TELESCOPE_OFFSETS 0 /* change to 1 to use telescope_offsets file for offset */
@@ -73,7 +75,7 @@
 #endif
 #define MAX_DEC 30.0 /* no decs higher than this */
 #define MIN_FOCUS 24.0 /* no focus setting (mm) less than this */
-#define MAX_FOCUS 28.0/* no focus setting (mm) less than this */
+#define MAX_FOCUS 30.0/* no focus setting (mm) more than this */
 #define MIN_FOCUS_INCREMENT 0.025 /* no focus increment (mm) less than this */
 #define MAX_FOCUS_INCREMENT 0.10 /* no focus increment (mm) less than this */
 #define MAX_FOCUS_CHANGE 0.3 /* maximum change from expected default mm */
@@ -96,6 +98,7 @@
 #define CLEAR_INTERVAL 0.1 /* hours since last exposure to start  clear */
 
 #define USE_12DEG_START 1 /* 1 to use 12-deg twilight, 0 to use 18-deg twilight */
+#define USE_ANYTIME_START 1 /* to test scheduler during daytime . This override USE_12DEG_START */
 #define STARTUP_TIME /*0.5*/0.0 /* hours to startup after end of twilight */
 #define MIN_EXECUTION_TIME 0.029 /* minimum time (hours) to make an observation */
 #define FOCUS_OVERHEAD 0.00555 /* time to change focus (hours) = 20 sec */
@@ -447,13 +450,15 @@ int get_telescope_focus (double *focus);
 
 
 /* from scheduler_camera.c */
+double init_readout_time(int amp_dir_code);
+
 int init_semaphores();
 int take_exposure(Field *f, Fits_Header *header, double *actual_expt,
 		    char *name, double *ut, double *jd,
 		    bool wait_flag, int *exp_error_code, char *exp_mode);
 int get_filename(char *filename,struct tm *tm,int shutter);
 int imprint_fits_header(Fits_Header *header);
-double wait_exp_done(int expt);
+double wait_exp_done(double expt, bool skip_status_check);
 int init_camera();
 int clear_camera();
 int update_camera_status(Camera_Status *cam_status);

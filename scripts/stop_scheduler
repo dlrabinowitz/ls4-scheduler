@@ -1,0 +1,9 @@
+#!/bin/tcsh
+
+# stop_scheduler
+# scheduler ends observations and exits
+
+# send SIGTERM (signal 15) to scheduler
+
+slay 15 scheduler
+

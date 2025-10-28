@@ -9,7 +9,7 @@
 # if the command line argument is "local", return current local date if it is after 
 # 8 AM local time, otherwise return yesterday's local date.
 #
-# if FAKE_OBS = 1, use current local date for local date and tomorrow's date
+# if FAKE_UT_DATE = 1, use current local date for local date and tomorrow's date
 # for UT date
 #
 #
@@ -40,18 +40,21 @@ endif
 #echo "leap_year = $leap_year"
 #echo "local = $local"
 #
-# for FAKER_OBS keep local date to current local date and set
+# for FAKE_UT_DATE keep local date to current local date and set
 # ut date to tomorrow's date. Do the same if local = 0 and
 # it is after 8 AM local time.
 #
-if ( $FAKE_OBS || ( $local == 0 && $current_local_hour >= 8 ) ) then
+if ( $FAKE_UT_DATE || ( $local == 0 && $current_local_hour >= 8 ) ) then
 #  add one to the ut date if the UT and local date are the same
    set d_local = `date  +"%Y%m%d"`
    set d_ut = `date -u  +"%Y%m%d"`
    if ( $d_ut == $d_local ) then
-     set dy = `date +"%Y"`
-     set dm = `date +"%m"`
-     set dd = `date +"%d"`
+     set dy1 = `date +"%Y"`
+     set dm1 = `date +"%m"`
+     set dd1 = `date +"%d"`
+     @ dy = $dy1 + 0
+     @ dm = $dm1 + 0
+     @ dd = $dd1 + 0
      set dy = `printf "%d" $dy`
      set dm = `printf "%d" $dm`
      set dd = `printf "%d" $dd`
@@ -79,7 +82,9 @@ if ( $FAKE_OBS || ( $local == 0 && $current_local_hour >= 8 ) ) then
 #     set d_ut = $dy$dm$dd
      set d_ut = `printf "%04d%02d%02d" $dy $dm $dd`
    endif
-   if ( $FAKE_OBS ) then
+
+   # append "fake" to ut_dt string if FAKE_UT_DATE is true
+   if ( $FAKE_UT_DATE ) then
       set d_ut = $d_ut.fake
    endif
    if ( $local == 0 ) then

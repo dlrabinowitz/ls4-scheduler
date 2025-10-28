@@ -1,0 +1,196 @@
+LS4 Observer Manual
+
+####################
+READ THIS FIRST
+
+This manual describes procedures for automated observing the with 
+the LS4 camera and ESO 1.0m Schmidt at La Silla.
+
+NOTES: 
+
+  - All observing must be done as the "observer" user on ls4-workstn.
+
+  - Any changes to the code, setup files,  or any other file linked to /home/observer
+    must be made by usr "ls4".
+
+  - Make sure you are running the "tcsh" script.
+
+  - Any time user "ls4" makes changes to the setup files (i.e ~/.login, ~/.tcshrc,
+    or ~/.bashrc) the observer must close all terminal windows and restart them.
+
+WARNINGS: 
+
+  -Never operate the telescope when anyone is in the dome, or when there are any
+obstructions in the way of the telescope. 
+
+  -Be sure the telescope platform is fully retracted to its lowest level.
+
+  -Enginering tests are for experts only. 
+
+
+######################################
+
+# QUICK START
+
+1. log in to ls4-workstn as observer
+2. upload obsplan to /home/observer/obsplan/YYYYMMDD/YYYYMMDD.obsplan where "YYYYMMDD" is the evening UT Date.
+3. Wait until sunset.
+4. Open the dome using the TCS console
+5. Given control of the TCS to ls4-workstn ("ALT 1")
+5. On ls4-workstn, execute "start_questctl". 
+5. On ls4-workstn, execute "obs_control"
+
+Stopping Observations (this stops the camera server and the scheduler):
+   obs_control stop
+
+Stopping Telescope Control :
+   stop_questctl
+
+Logs:
+   /home/observer/logs/questctl.YYYYMMDD.log
+   /home/observer/logs/startobs.log
+   /home/observer/logs/ccp.log
+
+Data:
+   /data/observer/YYYYMMDD/*fits
+
+Data Logs:
+   /Data/observer/YYYYMMDD/YYYYMMDD.log
+
+#################################################################################
+
+# DETAILS
+
+1. overview
+
+    There are three programs (controllers) for automatin observations:
+
+    scheduler - reads a script at the start of the night, and send commands
+                to the telescope and camera controllers to execute the
+                observations
+
+    questctl - controls the telescope. Takes commands over a TCP socket to
+               point, track, stow, open and close dome. 
+
+    ls4-control - controls the LS4 camera. Takes commands over a TCP socket
+               to initialize, clear, and exposure the camera.
+
+    Typically, the only action required by a an observer is to upload the
+    observing script for a given night. Everything else is controlled by
+    scripts automtically started each evening (cron jobs).
+
+2.  Details
+
+    observing script  
+        Each entry in the  script specifies a telescope pointing, exposure time,
+      shutter state (open or closed), number of observations, and interval between 
+      observations. There is also a priority code and a comment associated with each 
+      entry. Entries for darks, sky flats, and focus sequences have special formats.
+
+    scheduler 
+        The scheduler prioritizes scripted observations by choosing observations that
+      can be completed given the time remaining in the night and the observable areas
+      of the sky. Normally, observations that will occur below 2.0 airmasses, or too
+      close to the moon are skipped. If the dome is closed during the night (bad weather),
+      priorities are re-assigned depending on the time when the dome opens again. 
+        During the night, new observations can be added to the script. If there are 
+      given a high priority they will be queued as soon the the current exposure ends.
+        After each exposure if completed, telescope status parmeters are added to the
+      headers of the FITS images created by the ls4-control progrm.
+
+    questctl 
+        Commands to point the telescope are vetted to make sure they are within
+      the observable range of the telescope given the time of day. After slewing and
+      settling at a position, the tracking is checked by reading the pointing status
+      repeatedly to verify steady tracking. During the daytime, or whenever the dome
+      is closed, no pointing observations other than stow and commands to rotate the 
+      dome are allowed. 
+
+     ls4-control     
+        For optimal efficiency, ls4-control allows new exposures to be made while
+     the previous exposure is being transferred from the archon controllers to the
+     host computer. This is controlled by the exposure mode specified for each new
+     exposure. All images are saved to local disk as FITS images, with camera status
+     and exposure parameters.
+     
+   
+3. Engineering Tests
+  
+   WARNING: Only for experts. Be certain no one is in the dome during testing, unless
+   they are working in coordination with the observer.
+
+   Lower level tests can be performed  during the daytime. Most operations can be 
+   performed with scripts and programs at /home/observ/bin.
+
+   Starting ccp:
+     ~/ls4_control/start_ccp.bash [OPTIONS]
+
+     OPTIONS:
+      -log_level [level] : level of diagnostic messaging (ERROR,WARN,INFO,DEBUG)
+      -clear             : clear CCD on startup 
+      -reset             : reset controllers on startup 
+      -reboot            : reboot controllers on startup
+      -subread           : readout sub-section of each CCD
+      -poweroff          : reset and power off controllers
+      -fake              : fake the operation of the CCD controllers 
+      -log [file]        : write output messages to specified log file
+      -data_path [path]  : set directory path for saved images
+      -exp_time [expt]   : set default exposure time(sec) for exposures
+      -idle_fctn [fctn]  : set idle function between exposures (none,clear,flush)
+      -help              : print help
+
+
+   Taking exposures using "test_loop.csh"
+
+     ~/ls4_control/scripts/test_loop.csh [OPTIONS]
+
+     OPTIONS:
+       --shutter_flag [0 or 1]
+       --exptime [value in sec] 
+       --fits_prefix [string]  
+       --data_dir [string] 
+       --clear_flag[0 or 1] 
+       --num_exposures [int]
+
+     These options may also be specified by  -s -e -p -d -c -n, respectively.
+ 
+     Unless otherwise specified, the data are saved to 
+       $LS4_DATA_DIR/yyyymmdd/exp_nnnnn
+
+     where 
+       LS4_DATA_DIR is an environment variable (see below),
+
+       yyyymmdd is the UT date for the night ( the local date if the 
+       local time < 8 AM, otherwise the date for the next day).
+
+     and 
+       nnnn is the exposure index (starting with 1),
+
+     When option "-data_dir" is specified, it replaces LS4_DATA_DIR
+     
+   Aborting an ongoing exposure:
+     abortexp
+
+   Stopping ccp:
+     stopccp  
+
+   Abort the ccp server  (if stopccp fails):
+     abortccp
+
+   Killing ccp (if stopccp and abortccp fail):
+     killccp
+
+
+4. Environment variables (can only be changed by the "ls4" user).
+
+   The behaviour of the observing scripts depends on environment variables
+   declared in file "/home/observer/.login". 
+
+   For example, for simulated telescope and camera observations:
+     set FAKE_OBS = 1 
+
+
+
+ 
+   
+

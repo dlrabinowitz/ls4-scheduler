@@ -1,0 +1,277 @@
+#!/bin/tcsh
+# obs_control_script
+# D. Rabinowitz Oct 13 2025
+
+# script for starting,stopping, pausing, and resuming  point&shoot scheduler
+#
+# syntax: obs_control [start|stop|pause|unpause|new]
+#
+# where the options are:
+
+#   start- stop any ongoing scheduler operations. Restart the camera 
+#           server and the scheduler. If observations from the obsplan
+#          have already been completed, do not repeat them.
+#
+#   stop - stop the scheduler and shutdown the camera server (this powers
+#          the camera).
+#
+#   pause - pause the scheduled observations. Keep camera server running
+#           and camera powered up.
+#
+#   unpause - resume scheduled observations without restarting the
+#           camera. Use this to continue paused observations
+#
+#   new - restart the scheduler and camera, starting the observation
+#         at the beginning of the obsplan.
+#
+#   If no options are specified, the scheduler will resume where it 
+#   left off (if previously stopped) or else start from
+#   the start of the obsplan.
+#
+#################
+#
+#
+# Details:
+#
+# start:
+# Program looks for directory "$OBSPLAN_DIR/$d"
+# where $d is the ut for the night (yyyymmdd) and also looks for
+# an obsplan named $d.obsplan there. If found, it kill any currently
+# running instances of the scheduler and of auxilary scripts to 
+# to transfer and analyze the image data. It then restarts
+# the camera control program. This creates a data directory
+# at $QUESTNEATDATADIR named with the ut date (yyyymmdd) and 
+# containing a subdirectory for logs. It then
+# copies the current observing script to that log directory, starts
+# the scheduler from that directory, and starts all the other
+# scripts. All the logs from the various scripts go the the log
+# subdirectory
+#
+# Note that restarting the scheduler by running "obs_control"
+# with no other options  will scheduling where it left off by reading a binary
+# record of the previous observations ( "scheduler.bin" in the log
+# subdirectory). 
+# 
+#
+set RECIPIENTS = "david.rabinowitz@yale.edu"
+unalias rm
+
+set resume_flag = 1
+set stop_flag = 0
+set pause_flag = 0
+set unpause_flag = 0
+set cleanup_flag = 0
+
+if ( $#argv == 1 ) then
+  if ( $argv[1] == "start" ) then
+    # no flags to set. resume is assumed.
+  else if ( $argv[1] == "new" ) then
+     set resume_flag = 0
+  else if ( $argv[1] == "stop" ) then
+     set stop_flag = 1 
+  else if ( $argv[1] == "pause") then
+     set pause_flag = 1 
+  else if ( $argv[1] == "unpause") then
+     set unpause_flag = 1 
+  else if ( $argv[1] == "cleanup") then
+     set cleanup_flag = 1 
+     set stop_flag = 1;
+  else
+     echo "invalid command"
+     exit
+  endif
+else 
+  echo "must enter a valid command"
+  exit
+endif
+#
+#
+
+source $LS4_ROOT/.login
+
+# Use scripts to pause or unpause scheduler
+if ( $pause_flag ) then
+   echo "pause scheduler"
+   pause_scheduler
+   exit
+else if ( $unpause_flag ) then
+   echo "unpause scheduler"
+   continue_scheduler
+   exit
+endif
+
+
+unalias cp
+set d = `get_ut_date`
+set d0 = `echo $d | cut -c 1-8`
+#
+set TEMP_FILE = "/tmp/obs_control.tmp"
+set SCRIPTDIR = "$OBSPLAN_DIR/$d0"
+set SCRIPT = "$SCRIPTDIR/$d0.obsplan"
+set SCRIPT_LOG = "$d.log"
+#set OFFSET_FILE = "$LS4_ROOT/telescope_offsets.dat"
+#set OFFSET_LOG = "$LS4_ROOT/logs/telescope_offsets.log"
+#set STARTOBS_LOG = "$LS4_ROOT/logs/startobs.log"
+#set SCHEDULER_PROGRAM = "$LS4_ROOT/bin/scheduler"
+#set VERBOSE_FLAG = 0
+set HOUR_LIMIT = 24
+#
+if ( ! -e $QUESTNEATDATADIR ) then
+   echo "ERROR: can't find QUESTNEATDATADIR at $QUESTNEATDATADIR"
+   exit
+endif
+
+if ( ! -e $QUESTNEATDATADIR/$d ) then
+   echo "WARNING: can't find subdirectory [$d]  at $QUESTNEATDATADIR"
+   mkdir $QUESTNEATDATADIR/$d
+endif
+
+if ( ! -e $QUESTNEATDATADIR/$d/logs ) then
+   echo "WARNING: can't find subdirectory [$d/logs]  at $QUESTNEATDATADIR"
+   mkdir $QUESTNEATDATADIR/$d/logs
+endif
+
+set data_path = $QUESTNEATDATADIR/$d
+set log_dir = $QUESTNEATDATADIR/$d/logs
+#
+if ( ! -e $STARTOBS_LOG ) touch $STARTOBS_LOG
+date >> $STARTOBS_LOG
+
+echo "" >> $STARTOBS_LOG
+if ( $stop_flag ) then
+   echo "stopping camera_server" >> $STARTOBS_LOG
+   $LS4_ROOT/bin/restart_ccp stop >> $STARTOBS_LOG
+endif
+
+
+echo "slaying any ongoing realtime_transfer" >> $STARTOBS_LOG
+slay realtime_transfer >>& $STARTOBS_LOG
+slay quest_neat_transfer >>& $STARTOBS_LOG
+#
+echo "slaying any ongoing qa script" >> $STARTOBS_LOG
+slay quest_neat_qa >>& $STARTOBS_LOG
+
+#
+echo "killing any scheduler if it is running" >>& $STARTOBS_LOG
+slay scheduler >>& $STARTOBS_LOG
+#
+
+if ( $cleanup_flag ) then
+   
+   echo "removing log files"
+   mkdir /tmp/previous_logs
+   if ( -e ~/logs/previous_logs ) then
+      cp ~/logs/previous_logs/* /tmp/previous_logs
+      rm -rf ~/logs/previous_logs
+   endif
+   rm ~/logs/*
+   mv /tmp/previous_logs ~/logs
+endif
+
+if ( $stop_flag ) then
+   echo "done stopping observation program" >> $STARTOBS_LOG
+   exit
+endif
+
+if ( $resume_flag == 0 ) then
+   echo "starting with at beginning of obsplan" >> $STARTOBS_LOG
+else
+   if ( -e $log_dir/scheduler.bin ) then
+      echo "resuming from where obsplan was left off" >> $STARTOBS_LOG
+   endif
+endif
+#
+if ( ! -e $SCRIPT ) then
+   echo "can't find tonight's script at $SCRIPT" >> $STARTOBS_LOG
+   echo "can't find tonight's script at $SCRIPT" 
+
+
+#  if local time hour is less than HOUR_LIMIT, set up an at job to check again
+#  for tonight's script 30 minutes from now
+#  set h = `date +"%H"`
+#  if ( $h < 6 ) then
+#      @ h = $h + 24
+#  endif
+#  if ( $h < $HOUR_LIMIT ) then
+#      echo "rechecking in 30 minutes" >> $STARTOBS_LOG
+#      at -f "$LS4_ROOT/bin/obs_control" now + 30 minutes
+#  else
+#      echo " couldn't find obsplan. Giving up at  `date`" >> $STARTOBS_LOG
+#  endif
+#   mail -s "obs_control: no script for $d0" david.rabinowitz@yale.edu < $STARTOBS_LOG
+#  printf "Subject: obs_control: no script for $d0\n" >! $TEMP_FILE
+#  printf "\n" >> $TEMP_FILE
+#  cat $STARTOBS_LOG >> $TEMP_FILE
+#  printf "\n" >> $TEMP_FILE
+#  cat $TEMP_FILE | sendmail -fdavid.rabinowitz@yale.edu $RECIPIENTS
+
+   exit
+endif
+#
+
+
+echo "restarting ccp " >> $STARTOBS_LOG
+$LS4_ROOT/bin/restart_ccp $data_path >>& $STARTOBS_LOG
+echo "done restarting ccp" >> $STARTOBS_LOG
+#
+echo "checking if $log_dir exists" >>& $STARTOBS_LOG
+if ( ! -e $log_dir ) then
+   echo "can't find $log_dir" >> $STARTOBS_LOG
+   exit
+endif
+#
+
+#echo "testing quest_neatsrv" >> $STARTOBS_LOG
+#echo "s" | ~/palomar/scripts/quest_neatclient.pl >>& $STARTOBS_LOG
+#
+
+#echo "updating filter log:" >>& $STARTOBS_LOG
+#update_filter_log
+#tail -n 1 $FILTERLOG >> $STARTOBS_LOG
+#
+#
+echo "copying $SCRIPT to $log_dir" >> $STARTOBS_LOG
+cp $SCRIPT $log_dir
+echo "changing to to $log_dir" >> $STARTOBS_LOG
+cd $log_dir
+
+#  echo "copying observing script to ~guest" >> $STARTOBS_LOG
+#  if ( -e ~/bin/copy_script) ~/bin/copy_script
+#
+if ( ! $FAKE_CAMERA ) then
+echo "adding telescope offsets to offset log"
+if ( -e $OFFSET_FILE ) then
+      set l = `cat $OFFSET_FILE`
+      echo "$d $l" >> $OFFSET_LOG
+else
+   echo "no offset file [$OFFSET_FILE]"
+endif
+endif
+#
+#
+if ( $resume_flag == 0 ) then
+  echo "erasing previous log history" >> $STARTOBS_LOG
+  if ( -e $log_dir/scheduler.bin ) then
+     rm $log_dir/scheduler.bin
+  endif
+  echo "restarting scheduler" >> $STARTOBS_LOG
+else
+  echo "resuming scheduler" >> $STARTOBS_LOG
+endif
+#
+set d_local = `get_ut_date local`
+set dy = `echo $d_local | cut -c 1-4`
+set dm = `echo $d_local | cut -c 5-6`
+set dd = `echo $d_local | cut -c 7-8`
+#if ( $FAKE_CAMERA ) then
+#  @ dd = $dd - 1
+#endif
+set date_string = "$dy $dm $dd"
+echo "starting scheduler for local date $date_string"
+echo "$SCHEDULER_PROGRAM $SCRIPT $date_string  $VERBOSE_FLAG" >>& $STARTOBS_LOG
+$SCHEDULER_PROGRAM  $SCRIPT $date_string  $VERBOSE_FLAG >>& $SCRIPT_LOG  &
+#
+#
+echo "startobs finished" >> $STARTOBS_LOG
+#
+printf "Subject: obs_control: $d0 obs started\n" >! $TEMP_FILE

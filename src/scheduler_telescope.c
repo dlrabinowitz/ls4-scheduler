@@ -10,16 +10,20 @@
 
 
 
-
+// These ports not working
 #define TEL_COMMAND_PORT 3911  /*nightime */
 /*#define TEL_COMMAND_PORT 3912 daytime */
 #define DAYTIME_TEL_COMMAND_PORT 3912
+
+// For daytime and nightime, use same port ?
+#define TEL_COMMAND_PORT 3911  /*nightime */
 
 
 #define COMMAND_WAIT_TIME 100000 /* useconds to wait between commands */
 
 /* first word in reply from telescope controller */
 #define TEL_ERROR_REPLY "error"
+#define TEL_BADVAL_REPLY "error"
 #define TEL_DONE_REPLY "ok"
 
 
@@ -69,6 +73,7 @@ extern int verbose1;
 extern int stop_flag;
 extern int stow_flag;
 extern char *host_name;
+extern double ut_offset;
 
 /*****************************************************/
 
@@ -785,7 +790,7 @@ int do_telescope_command(char *command, char *reply, int timeout, char *host)
 
      if(send_command(command,reply,host,TEL_COMMAND_PORT,timeout)!=0){
        fprintf(stderr,
-          "do_telescope_command: error sendind command %s\n", command);
+          "do_telescope_command: error sending command %s\n", command);
        return(-1);
         fflush(stderr);
      }
@@ -793,7 +798,13 @@ int do_telescope_command(char *command, char *reply, int timeout, char *host)
 
      if(strstr(reply,TEL_ERROR_REPLY)!=NULL||strlen(reply)==0){
        fprintf(stderr,
-          "do_telescope_command: error reading domestatus : %s\n", 
+          "do_telescope_command: error executing commmand: %s\n", 
+           reply);
+       return(-1);
+     }
+     else if(strstr(reply,TEL_BADVAL_REPLY)!=NULL||strlen(reply)==0){
+       fprintf(stderr,
+          "do_telescope_command: bad value executing: %s\n", 
            reply);
        return(-1);
      }
@@ -812,6 +823,7 @@ int do_telescope_command(char *command, char *reply, int timeout, char *host)
          reply);
        return(-1);
      }
+
 }
 
 /*****************************************************/
@@ -829,7 +841,7 @@ int do_daytime_telescope_command(char *command, char *reply, int timeout, char *
 
      if(send_command(command,reply,host,DAYTIME_TEL_COMMAND_PORT,timeout)!=0){
        fprintf(stderr,
-          "do_telescope_command: error sendind command %s\n", command);
+          "do_telescope_command: error sending command %s\n", command);
        return(-1);
         fflush(stderr);
      }
@@ -837,7 +849,13 @@ int do_daytime_telescope_command(char *command, char *reply, int timeout, char *
 
      if(strstr(reply,TEL_ERROR_REPLY)!=NULL||strlen(reply)==0){
        fprintf(stderr,
-          "do_telescope_command: error reading domestatus : %s\n", 
+          "do_telescope_command: error executing commmand: %s\n", 
+           reply);
+       return(-1);
+     }
+     else if(strstr(reply,TEL_BADVAL_REPLY)!=NULL||strlen(reply)==0){
+       fprintf(stderr,
+          "do_telescope_command: bad value executing: %s\n", 
            reply);
        return(-1);
      }
@@ -874,8 +892,8 @@ double get_ut() {
 
 /*debug*/
 
-  if(UT_OFFSET!=0.0){
-     ut=ut+UT_OFFSET;
+  if(ut_offset!=0.0){
+     ut=ut+ut_offset;
      if(ut>24.0)ut=ut-24.0;
   }
 
@@ -908,9 +926,9 @@ double get_tm(struct tm *tm_out) {
 
 /*debug*/
 
-  if(UT_OFFSET!=0.0){
+  if(ut_offset!=0.0){
 
-     ut=ut+UT_OFFSET;
+     ut=ut+ut_offset;
      if(ut>24.0){
          ut=ut-24.0;
          advance_tm_day(tm);

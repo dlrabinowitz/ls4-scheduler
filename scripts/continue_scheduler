@@ -1,0 +1,15 @@
+#!/bin/tcsh
+
+# continue_scheduler
+# signal scheduler to continue observations
+
+# send SIGUSR2 (signal 12) to scheduler
+
+set l = `ps -aef | grep -e "scheduler" | grep -ve "_scheduler" | grep -ve "grep"`
+
+if ( $#l == 0 ) then
+  echo "WARNING: can not continue scheduler. Process is not currently running"
+else
+  slay 12 scheduler
+endif
+
