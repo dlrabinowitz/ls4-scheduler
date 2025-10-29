@@ -34,7 +34,7 @@ enum Amp_Direction_Code {BOTH_AMP_DIR,LEFT_AMP_DIR,RIGHT_AMP_DIR};
 //#define NUM_CAMERA_CLEARS 2 /* number of clears per camera clear */
 #define BOTH_AMP_READOUT_TIME_SEC 20
 #define SINGLE_AMP_READOUT_TIME_SEC 40
-#define TRANSFER_TIME_SEC 5 
+#define TRANSFER_TIME_SEC 10 /* normally 5 sec, and additional 5 sec just in case */
 
 /* macro to calculate exposure overhead in hours given readout time insec */
 
