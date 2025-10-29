@@ -1,0 +1,41 @@
+# These aliases (bash shell) allow the ls4 user on ls4-nuc to start/stop 
+# the scheduler code on ls4-workstn and to monitor the output logs.
+#
+# to use:
+#   Log in to ls4-workstn as observer. Create an observation plan. 
+#   Enter "start_questl" to start the telescope controller.
+#
+#   Log in in to the vnc server running on ls4-workstn. Open a terminal and
+#   enter "observer".
+#
+#   Follw the prompts in the the window titled "obs-control"  to start/stop
+#   the observations
+#
+
+observer_ssh='ssh -XY observer@ls4-workstn'
+
+alias obs-control='gnome-terminal --geometry 81x14--17+575 -t "ops-control" --wi
+ndow  -- $observer_ssh obs_control'
+
+alias obs-control-log='gnome-terminal --geometry 81x13--23--190 -t "ops-control 
+log" --window  -- $observer_ssh tail -F /home/observer/logs/startobs.log'
+
+alias ccp-log='gnome-terminal --geometry 89x26+-16+9 -t "ccp log" --window -- $o
+bserver_ssh tail -F /home/observer/logs/ccp.log'
+
+alias test-log='gnome-terminal --geometry 89x26+-16+9 -t "test log" --window -- 
+$observer_ssh " echo CCD_AMP_SELECTION is $CCD_AMP_SELECTION; sleep 10"'
+
+alias questctl-log='latest_log=`$observer_ssh ls -t /home/observer/logs/questctl
+*log`;gnome-terminal --geometry 90x32+-16--12 -t "questctl log" --window -- $obs
+erver_ssh tail -F $latest_log'
+
+alias scheduler-log='dt=`$observer_ssh get_ut_date`;data_dir=`$observer_ssh get_
+data_dir`;gnome-terminal  --geometry 81x26--21+9 -t "scheduler log $dt" --window
+ -- $observer_ssh tail -F $data_dir/logs/$dt.log'
+
+alias observe='obs-control; obs-control-log; ccp-log; questctl-log; scheduler-lo
+g'
+[daver@quest22-hep-yale-edu testing_20251027]$  
+
+
