@@ -1687,7 +1687,7 @@ int observe_next_field(Field *sequence, int index, int index_prev,
     else if (f->shutter==MORNING_FLAT_CODE){
     if(f->n_done==0){
         ha=3.0;
-        f->ra=lst-4.0;
+        f->ra=lst-3.0;
         if(f->ra<0.0)f->ra=f->ra+24.0;
         f->dec=0.0;
         fprintf(stderr,
@@ -2437,93 +2437,93 @@ int get_next_field(Field *sequence,int num_fields, int i_prev,
      n_late_must_do=0;
 
      if(verbose){  
-      fprintf(stderr,"get_next_field: updating field status\n");
+    fprintf(stderr,"get_next_field: updating field status\n");
      }
 
      for(i=0;i<num_fields;i++){
-       f=sequence+i;
+     f=sequence+i;
 
-       update_field_status(f,jd,bad_weather);
-       if(verbose1){
-         get_field_status_string(f,field_status);
-         fprintf(stderr,"field %d status %s\n",i,field_status);
-       }
+     update_field_status(f,jd,bad_weather);
+     if(verbose1){
+       get_field_status_string(f,field_status);
+       fprintf(stderr,"field %d status %s\n",i,field_status);
+     }
 
 #if 1
-       /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
-          value of n_left */
+     /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
+        value of n_left */
 
-       if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
-          n_ready_must_do++;
+     if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
+        n_ready_must_do++;
 
-          n_left=f->n_required-f->n_done;
-          
-          if(n_left<n_left_min_must_do){
-           n_left_min_must_do=n_left;
-          }
+        n_left=f->n_required-f->n_done;
+        
+        if(n_left<n_left_min_must_do){
+         n_left_min_must_do=n_left;
+        }
 
-       }
+     }
 
-       /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
-          field).  Return field index */
+     /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
+        field).  Return field index */
 
-       else if(f->status==DO_NOW_STATUS){
-          n_do_now++;
-          if(i_min_do_now==-1)i_min_do_now=i;
-          if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
-          if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
-            f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
-          /*return(i);*/
-       }
+     else if(f->status==DO_NOW_STATUS){
+        n_do_now++;
+        if(i_min_do_now==-1)i_min_do_now=i;
+        if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
+        if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
+          f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
+        /*return(i);*/
+     }
 
 #else
-       /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
-          field).  Return field index */
+     /* status of DO_NOW_STATUS  means must do now (i.e. darks or 2nd offset
+        field).  Return field index */
 
-       if(f->status==DO_NOW_STATUS){
-          n_do_now++;
-          if(i_min_do_now==-1)i_min_do_now=i;
-          if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
-          if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
-            f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
-          /*return(i);*/
-       }
+     if(f->status==DO_NOW_STATUS){
+        n_do_now++;
+        if(i_min_do_now==-1)i_min_do_now=i;
+        if(f->shutter==DARK_CODE&&i_min_dark==-1)i_min_dark=i;
+        if((f->shutter==DOME_FLAT_CODE||f->shutter==EVENING_FLAT_CODE||
+          f->shutter==MORNING_FLAT_CODE)&&i_min_flat==-1)i_min_flat=i;
+        /*return(i);*/
+     }
 
-       /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
-          value of n_left */
+     /* for any MUST-DO field with READY_STATUS, increment the count and update minimum
+        value of n_left */
 
-       else if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
-          n_ready_must_do++;
+     else if (f->status==READY_STATUS&&f->survey_code==MUSTDO_SURVEY_CODE){
+        n_ready_must_do++;
 
-          n_left=f->n_required-f->n_done;
-          
-          if(n_left<n_left_min_must_do){
-           n_left_min_must_do=n_left;
-          }
+        n_left=f->n_required-f->n_done;
+        
+        if(n_left<n_left_min_must_do){
+         n_left_min_must_do=n_left;
+        }
 
-       }
+     }
 #endif
 
-       /* for any other field with READY_STATUS, increment the count and update minimum
-          value of n_left */
+     /* for any other field with READY_STATUS, increment the count and update minimum
+        value of n_left */
 
-       else if (f->status==READY_STATUS){
-          n_ready++;
+     else if (f->status==READY_STATUS){
+        n_ready++;
 
-          n_left=f->n_required-f->n_done;
-          
-          if(n_left<n_left_min){
-           n_left_min=n_left;
-          }
+        n_left=f->n_required-f->n_done;
+        
+        if(n_left<n_left_min){
+         n_left_min=n_left;
+        }
 
-       }
+     }
 
-       /* Also count fields with TOO_LATE_STATUS */
+     /* Also count fields with TOO_LATE_STATUS */
 
-       else if (f->status==TOO_LATE_STATUS){
-          n_late++;
-          if(f->survey_code==MUSTDO_SURVEY_CODE)n_late_must_do++;
-       }
+     else if (f->status==TOO_LATE_STATUS){
+        n_late++;
+        if(f->survey_code==MUSTDO_SURVEY_CODE)n_late_must_do++;
+     }
 
      } //for(i=0;i<num_fields;i++){
 

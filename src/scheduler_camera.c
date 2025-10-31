@@ -996,14 +996,28 @@ int clear_camera()
      char reply[MAXBUFSIZE];
      char command_string[STR_BUF_LEN];
 
-     double timeout = CLEAR_TIME +  5;
-     sprintf(command_string,"%s %d",CLEAR_COMMAND,CLEAR_TIME);
+     double clear_time = readout_time_sec + 5;
+     double timeout = clear_time + 5;
+
+     if(verbose){
+       fprintf(stderr,"clear_camera: start clearing camera for %7.3f sec\n",clear_time);
+       fflush(stderr);
+     }
+     sprintf(command_string,"%s %d",CLEAR_COMMAND,clear_time);
 
      command_id++;
      if(do_camera_command(command_string,reply,timeout,command_id,host_name)!=0){
+       if(verbose){
+         fprintf(stderr,"clear_camera: error clearing camera for %7.3f sec\n",clear_time);
+         fflush(stderr);
+       }
        return(-1);
      }
      else {
+       if(verbose){
+         fprintf(stderr,"clear_camera: done clearing camera for %7.3f sec\n",clear_time);
+         fflush(stderr);
+       }
        return(0);
      }
 

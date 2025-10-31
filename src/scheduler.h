@@ -95,10 +95,10 @@
 #endif
                                
 
-#define CLEAR_INTERVAL 0.1 /* hours since last exposure to start  clear */
+#define CLEAR_INTERVAL 0.2 /* hours since last exposure to start  clear */
 
 #define USE_12DEG_START 1 /* 1 to use 12-deg twilight, 0 to use 18-deg twilight */
-#define USE_ANYTIME_START 1 /* to test scheduler during daytime . This override USE_12DEG_START */
+#define USE_ANYTIME_START 0 /* to test scheduler during daytime . This override USE_12DEG_START */
 #define STARTUP_TIME /*0.5*/0.0 /* hours to startup after end of twilight */
 #define MIN_EXECUTION_TIME 0.029 /* minimum time (hours) to make an observation */
 #define FOCUS_OVERHEAD 0.00555 /* time to change focus (hours) = 20 sec */
